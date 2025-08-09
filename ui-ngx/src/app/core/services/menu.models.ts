@@ -86,6 +86,7 @@ export enum MenuId {
   clients = 'clients',
   audit_log = 'audit_log',
   alarms = 'alarms',
+  reports = 'reports',
   dashboards = 'dashboards',
   entities = 'entities',
   devices = 'devices',
@@ -505,6 +506,16 @@ export const menuSectionMap = new Map<MenuId, MenuSection>([
     }
   ],
   [
+    MenuId.reports,
+    {
+      id: MenuId.reports,
+      name: 'alarm.alarms',
+      type: 'link',
+      path: '/reports',
+      icon: 'settings_backup_restore'
+    }
+  ],
+  [
     MenuId.dashboards,
     {
       id: MenuId.dashboards,
@@ -890,6 +901,7 @@ const defaultUserMenuMap = new Map<Authority, MenuReference[]>([
     [
       {id: MenuId.home},
       {id: MenuId.alarms},
+      {id: MenuId.reports},
       {id: MenuId.dashboards},
       {
         id: MenuId.entities,

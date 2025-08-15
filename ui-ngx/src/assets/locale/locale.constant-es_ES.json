@@ -673,6 +673,17 @@
     "text": "Texto",
     "system": "Sistema"
   },
+    "data-export": {
+    "title": "Exportar datos",
+     "select-device": "Selecciona dispositivo",
+     "select-keys": "Selecciona claves",
+      "start": "Inicio",
+      "end": "Fin",
+      "interval-ms": "Intervalo (ms)",
+      "aggregation": "Agregación",
+      "format": "Formato",
+      "export": "Exportar"
+    },
   "alias": {
     "add": "Agregar alias",
     "edit": "Editar alias",

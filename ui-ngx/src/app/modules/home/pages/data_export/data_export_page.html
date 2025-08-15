@@ -1,0 +1,69 @@
+<!--
+ Data Export Page Template
+ Ubicación: ui-ngx/src/app/modules/home/pages/data-export/data-exportpage.html
+-->
+<div class="data-export-page">
+<div class="header">
+<h2>{{ 'data-export.title' | translate }}</h2>
+</div>
+<form [formGroup]="form" class="form-grid">
+<!-- Dispositivo -->
+<mat-form-field appearance="fill">
+<mat-label>{{ 'data-export.select-device' | translate }}</mat-label>
+<mat-select formControlName="deviceId" [disabled]="loadingDevices">
+<mat-option *ngFor="let d of devices" [value]="d.id.id">{{ d.name }}
+5
+</mat-option>
+</mat-select>
+<mat-hint *ngIf="loadingDevices">{{ 'action.loading' | translate }}</
+mat-hint>
+</mat-form-field>
+<!-- Keys de telemetría -->
+<mat-form-field appearance="fill">
+<mat-label>{{ 'data-export.select-keys' | translate }}</mat-label>
+<mat-select formControlName="keys" multiple [disabled]="loadingKeys
+|| !form.get('deviceId')?.value">
+<mat-option *ngFor="let k of availableKeys" [value]="k">{{ k }}</
+mat-option>
+</mat-select>
+<mat-hint *ngIf="loadingKeys">{{ 'action.loading' | translate }}</mathint>
+</mat-form-field>
+<!-- Rango de tiempo -->
+<mat-form-field appearance="fill">
+<mat-label>{{ 'data-export.start' | translate }}</mat-label>
+<input matInput type="datetime-local" formControlName="startDate">
+</mat-form-field>
+<mat-form-field appearance="fill">
+<mat-label>{{ 'data-export.end' | translate }}</mat-label>
+<input matInput type="datetime-local" formControlName="endDate">
+</mat-form-field>
+<!-- Intervalo y agregación (opcional) -->
+<mat-form-field appearance="fill">
+<mat-label>{{ 'data-export.interval-ms' | translate }}</mat-label>
+<input matInput type="number" formControlName="interval" min="1"
+placeholder="e.g. 60000">
+<mat-hint>60,000 = 1 min</mat-hint>
+</mat-form-field>
+<mat-form-field appearance="fill">
+<mat-label>{{ 'data-export.aggregation' | translate }}</mat-label>
+<mat-select formControlName="aggregation">
+<mat-option *ngFor="let agg of aggregations" [value]="agg">{{ agg }}
+</mat-option>
+</mat-select>
+</mat-form-field>
+<!-- Formato -->
+<mat-form-field appearance="fill">
+<mat-label>{{ 'data-export.format' | translate }}</mat-label>
+<mat-select formControlName="format">
+<mat-option *ngFor="let f of formats" [value]="f">{{ f }}</matoption>
+6
+</mat-select>
+</mat-form-field>
+</form>
+<div class="actions">
+<button mat-flat-button color="primary" (click)="export()"
+[disabled]="form.invalid">
+ {{ 'data-export.export' | translate }}
+</button>
+</div>
+</div>

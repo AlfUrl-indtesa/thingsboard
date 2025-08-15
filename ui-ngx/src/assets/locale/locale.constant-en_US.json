@@ -728,6 +728,17 @@
         "all-entities": "All entities",
         "any-relation": "any"
     },
+    "data-export": {
+    "title": "Export Data",
+     "select-device": "Select Device",
+     "select-keys": "Select Keys",
+      "start": "Start",
+      "end": "End",
+      "interval-ms": "Interval (ms)",
+      "aggregation": "Aggregation",
+      "format": "Format",
+      "export": "Export"
+    },
     "asset": {
         "asset": "Asset",
         "assets": "Assets",

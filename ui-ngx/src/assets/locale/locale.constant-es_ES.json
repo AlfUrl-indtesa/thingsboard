@@ -673,17 +673,19 @@
     "text": "Texto",
     "system": "Sistema"
   },
-    "data-export": {
+    "data_export": {
     "title": "Exportar datos",
-     "select-device": "Selecciona dispositivo",
-     "select-keys": "Selecciona claves",
-      "start": "Inicio",
-      "end": "Fin",
-      "interval-ms": "Intervalo (ms)",
-      "aggregation": "Agregación",
-      "format": "Formato",
-      "export": "Exportar"
-    },
+    "export": "Exportar datos",
+    "select_device": "Selecciona dispositivo",
+    "select_keys": "Selecciona claves",
+    "start": "Inicio",
+    "end": "Fin",
+    "interval_ms": "Intervalo (ms)",
+    "aggregation": "Agregación",
+    "format": "Formato",
+    "export_btn": "Exportar"
+  },
+  
   "alias": {
     "add": "Agregar alias",
     "edit": "Editar alias",

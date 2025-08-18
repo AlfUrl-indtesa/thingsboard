@@ -684,7 +684,7 @@
     "aggregation": "Agregación",
     "format": "Formato",
     "export_btn": "Exportar"
-  }
+  },
   
   "alias": {
     "add": "Agregar alias",
@@ -1203,6 +1203,7 @@
     "city-max-length": "La ciudad especificada debe tener menos de 256 caracteres"
   },
   "common": {
+    "now": "Ahora",
     "name": "Nombre",
     "type": "Tipo",
     "general": "General",

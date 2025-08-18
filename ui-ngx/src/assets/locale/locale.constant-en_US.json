@@ -1204,6 +1204,7 @@
         "city-max-length": "Specified city should be less than 256"
     },
     "common": {
+        "now":"Now",
         "name": "Name",
         "type": "Type",
         "general": "General",

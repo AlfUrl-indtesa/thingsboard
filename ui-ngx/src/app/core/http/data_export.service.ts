@@ -7,7 +7,7 @@ import { DataExportQuery } from '@shared/models/data_export.models';
 export class DataExportService {
   constructor(private http: HttpClient) {}
   exportData(query: DataExportQuery): Observable<Blob> {
-    const url = `/api/data-export${query.toQuery()}`;
+    const url = `/api/data_export${query.toQuery()}`;
     return this.http.get(url, { responseType: 'blob' });
   }
 }

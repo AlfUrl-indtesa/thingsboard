@@ -1,7 +1,4 @@
-<!--
-  Data Export Page Template
-  Ubicación: ui-ngx/src/app/modules/home/pages/data_export/data_export_page.html
--->
+<!-- Data Export Page Template -->
 
 <div class="data-export-page">
   <div class="header">
@@ -14,9 +11,7 @@
     <mat-form-field appearance="fill">
       <mat-label>{{ 'data_export.select_device' | translate }}</mat-label>
       <mat-select formControlName="deviceId" [disabled]="loadingDevices">
-        <mat-option *ngFor="let d of devices" [value]="d.id.id">
-          {{ d.name }}
-        </mat-option>
+        <mat-option *ngFor="let d of devices" [value]="d.id.id">{{ d.name }}</mat-option>
       </mat-select>
       <mat-hint *ngIf="loadingDevices">{{ 'action.loading' | translate }}</mat-hint>
     </mat-form-field>
@@ -25,37 +20,58 @@
     <mat-form-field appearance="fill">
       <mat-label>{{ 'data_export.select_keys' | translate }}</mat-label>
       <mat-select formControlName="keys" multiple [disabled]="loadingKeys || !form.get('deviceId')?.value">
-        <mat-option *ngFor="let k of availableKeys" [value]="k">
-          {{ k }}
-        </mat-option>
+        <mat-option *ngFor="let k of availableKeys" [value]="k">{{ k }}</mat-option>
       </mat-select>
       <mat-hint *ngIf="loadingKeys">{{ 'action.loading' | translate }}</mat-hint>
     </mat-form-field>
 
-    <!-- Rango de tiempo -->
+    <!-- Inicio: fecha + hora -->
     <mat-form-field appearance="fill">
       <mat-label>{{ 'data_export.start' | translate }}</mat-label>
-      <input matInput type="datetime-local" formControlName="startDate">
+      <input matInput [matDatepicker]="pickerStart" formControlName="startDate">
+      <mat-datepicker-toggle matSuffix [for]="pickerStart"></mat-datepicker-toggle>
+      <mat-datepicker #pickerStart></mat-datepicker>
+      <mat-error *ngIf="form.hasError('startBeforeFirstMeasurement')">
+        {{ 'data_export.start' | translate }} &lt; primera medición
+      </mat-error>
+      <mat-error *ngIf="form.hasError('startAfterEnd')">
+        {{ 'data_export.start' | translate }} &gt; {{ 'data_export.end' | translate }}
+      </mat-error>
     </mat-form-field>
 
+    <mat-form-field appearance="fill">
+      <mat-label>HH:MM</mat-label>
+      <input matInput type="time" formControlName="startTime" required>
+    </mat-form-field>
+
+    <!-- Fin: fecha + hora -->
     <mat-form-field appearance="fill">
       <mat-label>{{ 'data_export.end' | translate }}</mat-label>
-      <input matInput type="datetime-local" formControlName="endDate">
+      <input matInput [matDatepicker]="pickerEnd" formControlName="endDate">
+      <mat-datepicker-toggle matSuffix [for]="pickerEnd"></mat-datepicker-toggle>
+      <mat-datepicker #pickerEnd></mat-datepicker>
+      <mat-error *ngIf="form.hasError('endInFuture')">
+        {{ 'data_export.end' | translate }} &gt; {{ 'common.now' | translate || 'Ahora' }}
+      </mat-error>
     </mat-form-field>
 
-    <!-- Intervalo y agregación (opcional) -->
+    <mat-form-field appearance="fill">
+      <mat-label>HH:MM</mat-label>
+      <input matInput type="time" formControlName="endTime" required>
+    </mat-form-field>
+
+    <!-- Intervalo (segundos) -->
     <mat-form-field appearance="fill">
       <mat-label>{{ 'data_export.interval_ms' | translate }}</mat-label>
-      <input matInput type="number" formControlName="interval" min="1" placeholder="60000">
-      <mat-hint>60,000 = 1 min</mat-hint>
+      <input matInput type="number" formControlName="intervalSec" min="1" placeholder="1">
+      <mat-hint>segundos (se convertirá a ms)</mat-hint>
     </mat-form-field>
 
+    <!-- Agregación -->
     <mat-form-field appearance="fill">
       <mat-label>{{ 'data_export.aggregation' | translate }}</mat-label>
       <mat-select formControlName="aggregation">
-        <mat-option *ngFor="let agg of aggregations" [value]="agg">
-          {{ agg }}
-        </mat-option>
+        <mat-option *ngFor="let agg of aggregations" [value]="agg">{{ agg }}</mat-option>
       </mat-select>
     </mat-form-field>
 
@@ -63,9 +79,7 @@
     <mat-form-field appearance="fill">
       <mat-label>{{ 'data_export.format' | translate }}</mat-label>
       <mat-select formControlName="format">
-        <mat-option *ngFor="let f of formats" [value]="f">
-          {{ f }}
-        </mat-option>
+        <mat-option *ngFor="let f of formats" [value]="f">{{ f }}</mat-option>
       </mat-select>
     </mat-form-field>
 

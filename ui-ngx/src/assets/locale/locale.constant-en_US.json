@@ -735,7 +735,7 @@
     "select_keys": "Select keys",
     "start": "Start",
     "end": "End",
-    "interval_ms": "Interval (ms)",
+    "interval_ms": "Interval",
     "aggregation": "Aggregation",
     "format": "Format",
     "export_btn": "Export"

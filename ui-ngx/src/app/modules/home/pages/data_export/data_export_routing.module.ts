@@ -1,22 +1,18 @@
-/*
- * Data Export Routing Module
- * Ubicación: ui-ngx/src/app/modules/home/pages/data-export/data-exportrouting.module.ts
- */
+// ui-ngx/src/app/modules/home/pages/data_export/data_export-routing.module.ts
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { DataExportPageComponent } from './data_export_page.component';
+
 const routes: Routes = [
-{
-path: '',
-component: DataExportPageComponent,
-data: {
-auth: ['CUSTOMER_USER'],
-title: 'data-export.title'
-}
-}
+  {
+    path: 'data_export',
+    component: DataExportPageComponent,
+    data: { auth: ['CUSTOMER_USER'], title: 'data_export.title' }
+  }
 ];
+
 @NgModule({
-imports: [RouterModule.forChild(routes)],
-exports: [RouterModule]
+  imports: [RouterModule.forChild(routes)],
+  exports: [RouterModule]
 })
 export class DataExportRoutingModule {}

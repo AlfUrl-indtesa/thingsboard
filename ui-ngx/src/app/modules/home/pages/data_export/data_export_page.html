@@ -32,10 +32,10 @@
       <mat-datepicker-toggle matSuffix [for]="pickerStart"></mat-datepicker-toggle>
       <mat-datepicker #pickerStart></mat-datepicker>
       <mat-error *ngIf="form.hasError('startBeforeFirstMeasurement')">
-        {{ 'data_export.start' | translate }} &lt; primera medición
+        {{ 'data_export.start' | translate }} &gt;= primera medición
       </mat-error>
       <mat-error *ngIf="form.hasError('startAfterEnd')">
-        {{ 'data_export.start' | translate }} &gt; {{ 'data_export.end' | translate }}
+        {{ 'data_export.start' | translate }} &lt;= {{ 'data_export.end' | translate }}
       </mat-error>
     </mat-form-field>
 
@@ -51,7 +51,7 @@
       <mat-datepicker-toggle matSuffix [for]="pickerEnd"></mat-datepicker-toggle>
       <mat-datepicker #pickerEnd></mat-datepicker>
       <mat-error *ngIf="form.hasError('endInFuture')">
-        {{ 'data_export.end' | translate }} &gt; {{ 'common.now' | translate || 'Ahora' }}
+        {{ 'data_export.end' | translate }} &lt;= {{ 'common.now' | translate }}
       </mat-error>
     </mat-form-field>
 

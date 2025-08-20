@@ -15,46 +15,35 @@
  */
 package org.thingsboard.server.controller;
 
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.EntityType;
-import org.thingsboard.server.common.data.id.DeviceId;
-import org.thingsboard.server.common.data.id.EntityId;
-import org.thingsboard.server.common.data.id.EntityIdFactory;
-import org.thingsboard.server.common.data.kv.BaseTsKvQuery;
-import org.thingsboard.server.common.data.kv.BooleanDataEntry;
-import org.thingsboard.server.common.data.kv.DoubleDataEntry;
-import org.thingsboard.server.common.data.kv.JsonDataEntry;
-import org.thingsboard.server.common.data.kv.KvEntry;
-import org.thingsboard.server.common.data.kv.LongDataEntry;
-import org.thingsboard.server.common.data.kv.StringDataEntry;
-import org.thingsboard.server.common.data.kv.TsKvEntry;
-import org.thingsboard.server.common.data.kv.TsKvQuery;
-// ⚠️ En tu rama, Aggregation suele estar aquí:
-import org.thingsboard.server.common.data.kv.Aggregation;
-// Si te fallara, prueba: import org.thingsboard.server.common.data.query.Aggregation;
-
+import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.exception.ThingsboardErrorCode;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.id.DeviceId;
+import org.thingsboard.server.common.data.id.EntityId;
+import org.thingsboard.server.common.data.id.TenantId;
+import org.thingsboard.server.common.data.kv.Aggregation;
+import org.thingsboard.server.common.data.kv.BaseReadTsKvQuery;
+import org.thingsboard.server.common.data.kv.ReadTsKvQuery;
+import org.thingsboard.server.common.data.kv.TsKvEntry;
 import org.thingsboard.server.config.annotations.ApiOperation;
-import org.thingsboard.server.dao.timeseries.TimeseriesService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.security.permission.Operation;
+import org.thingsboard.server.dao.timeseries.TimeseriesService;
 
+import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Slf4j
 @RestController
 @TbCoreComponent
 @RequiredArgsConstructor
@@ -63,192 +52,160 @@ public class DataExportController extends BaseController {
 
     private final TimeseriesService timeseriesService;
 
-    @ApiOperation(value = "Export device telemetry (exportData)",
-            notes = "Exports timeseries for the given device and keys within the time window. " +
-                    "Supports raw and aggregated queries. Returns CSV (default) or JSON.")
-    @ApiResponse(responseCode = "200", description = "OK", content = @Content(mediaType = "text/csv",
-            examples = @ExampleObject(value = "timestamp,key1,key2\n1712092800000,12.3,1\n")))
-    @GetMapping(value = {"/data_export/{entityType}/{entityId}", "/data-export/{entityType}/{entityId}"})
-    @PreAuthorize("hasAuthority('CUSTOMER_USER')")
-    public void exportData(@PathVariable String entityType,
+    public enum DataExportFormat { CSV, JSON }
+
+    @ApiOperation(value = "Export time-series data (exportData)")
+    @PreAuthorize("hasAnyAuthority('TENANT_ADMIN','CUSTOMER_USER')")
+    @GetMapping(value = "/data_export/{entityType}/{entityId}")
+    public void exportData(@PathVariable("entityType") String strEntityType,
                            @PathVariable("entityId") String strEntityId,
-                           @RequestParam String keys,
-                           @RequestParam long startTs,
-                           @RequestParam long endTs,
-                           @RequestParam(required = false) Long interval,      // ms (opcional)
-                           @RequestParam(required = false) String agg,         // NONE|MIN|MAX|AVG|SUM
-                           @RequestParam(defaultValue = "CSV") String format,  // CSV | JSON
+                           @RequestParam("keys") String keysParam,
+                           @RequestParam("startTs") long startTs,
+                           @RequestParam("endTs") long endTs,
+                           @RequestParam(name = "interval", required = false, defaultValue = "0") long interval,
+                           @RequestParam(name = "agg", required = false, defaultValue = "NONE") String aggStr,
+                           @RequestParam(name = "format", required = false, defaultValue = "CSV") String formatStr,
+                           @RequestHeader(name = HttpHeaders.ACCEPT_ENCODING, required = false) String acceptEncodingHeader,
                            HttpServletResponse response) throws Exception {
 
-        if (!EntityType.DEVICE.name().equals(entityType)) {
-            throw new ThingsboardException("Only DEVICE is supported",
-                    ThingsboardErrorCode.BAD_REQUEST_PARAMS, HttpStatus.BAD_REQUEST);
+        // Validaciones básicas
+        if (!"DEVICE".equalsIgnoreCase(strEntityType)) {
+            throw new ThingsboardException("Only DEVICE entityType is supported",
+                    ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
-
-        // Permisos y pertenencia al customer actual
-        DeviceId deviceId = new DeviceId(toUUID(strEntityId));
-        Device device = checkDeviceId(deviceId, Operation.READ);
-
+        if (startTs <= 0 || endTs <= 0 || startTs >= endTs) {
+            throw new ThingsboardException("Invalid time range",
+                    ThingsboardErrorCode.BAD_REQUEST_PARAMS);
+        }
         long now = System.currentTimeMillis();
-        if (endTs > now) endTs = now;
-        if (startTs > endTs) {
-            throw new ThingsboardException("startTs must be <= endTs",
-                    ThingsboardErrorCode.BAD_REQUEST_PARAMS, HttpStatus.BAD_REQUEST);
+        if (endTs > now) {
+            endTs = now; // Acotar al presente
         }
 
-        List<String> keyList = Arrays.stream(keys.split(","))
-                .map(s -> URLDecoder.decode(s, StandardCharsets.UTF_8))
-                .map(String::trim)
-                .filter(k -> !k.isEmpty())
-                .collect(Collectors.toList());
-        if (keyList.isEmpty()) {
+        // Entidad y permisos (lectura de telemetría)
+        DeviceId deviceId = new DeviceId(toUUID(strEntityId));
+        Device device = checkDeviceId(deviceId, Operation.READ_TELEMETRY);
+        TenantId tenantId = getTenantId(); // del usuario actual
+
+        // Claves
+        List<String> keys = parseKeys(keysParam);
+        if (keys.isEmpty()) {
             throw new ThingsboardException("keys parameter is empty",
-                    ThingsboardErrorCode.BAD_REQUEST_PARAMS, HttpStatus.BAD_REQUEST);
+                    ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
 
-        Aggregation aggregation = Aggregation.NONE;
-        if (agg != null && !agg.isBlank()) {
-            try {
-                aggregation = Aggregation.valueOf(agg.trim().toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException e) {
-                throw new ThingsboardException("Unsupported agg: " + agg,
-                        ThingsboardErrorCode.BAD_REQUEST_PARAMS, HttpStatus.BAD_REQUEST);
-            }
+        // Agregación e intervalo
+        Aggregation aggregation;
+        try {
+            aggregation = Aggregation.valueOf(aggStr.toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            throw new ThingsboardException("Invalid agg parameter: " + aggStr,
+                    ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
-        long usedInterval = interval != null ? Math.max(0, interval) : 0L;
-        if (aggregation != Aggregation.NONE && usedInterval <= 0) {
-            throw new ThingsboardException("interval (ms) must be > 0 when agg != NONE",
-                    ThingsboardErrorCode.BAD_REQUEST_PARAMS, HttpStatus.BAD_REQUEST);
+        if (aggregation != Aggregation.NONE && interval <= 0) {
+            throw new ThingsboardException("interval must be > 0 when agg != NONE",
+                    ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
-
-        // Construir queries por key
-        int limit = 0; // sin límite explícito
-        List<TsKvQuery> queries = new ArrayList<>(keyList.size());
-        for (String key : keyList) {
-            queries.add(new BaseTsKvQuery(key, startTs, endTs, usedInterval, limit, aggregation));
+        if (aggregation == Aggregation.NONE) {
+            // En consultas RAW, ThingsBoard ignora 'interval', pero lo dejamos en 0 explícitamente
+            interval = 0L;
         }
 
-        // Ejecutar consulta para todas las keys
-        EntityId eid = EntityIdFactory.getByTypeAndUuid(entityType, deviceId.getId());
-        List<List<TsKvEntry>> resultPerKey = timeseriesService.findAll(getTenantId(), eid, queries);
+        // Límite de puntos: usa un valor alto razonable para export (evita Integer.MAX_VALUE).
+        final int limit = 100_000;
 
-        // Pivot por timestamp (columnas por key)
-        Map<String, Integer> keyIndex = new LinkedHashMap<>();
-        for (int i = 0; i < keyList.size(); i++) keyIndex.put(keyList.get(i), i);
+        // Construir queries por clave (orden ASC por defecto)
+        List<ReadTsKvQuery> queries = keys.stream()
+                .map(k -> new BaseReadTsKvQuery(k, startTs, endTs, interval, limit, aggregation))
+                .collect(Collectors.toList());
 
-        TreeMap<Long, String[]> rows = new TreeMap<>();
-        for (int i = 0; i < keyList.size(); i++) {
-            List<TsKvEntry> series = (i < resultPerKey.size()) ? resultPerKey.get(i) : Collections.emptyList();
-            for (TsKvEntry e : series) {
-                long ts = e.getTs();
-                String[] row = rows.computeIfAbsent(ts, t -> new String[keyList.size()]);
-                row[i] = kvToString(e);
-            }
+        // Ejecutar consulta (la API devuelve una Future)
+        List<TsKvEntry> entries = timeseriesService.findAll(tenantId, deviceId, queries).get();
+
+        // Formato de salida
+        DataExportFormat format;
+        try {
+            format = DataExportFormat.valueOf(formatStr.toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            throw new ThingsboardException("Invalid format parameter: " + formatStr,
+                    ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
 
-        String out = format == null ? "CSV" : format.trim().toUpperCase(Locale.ROOT);
-        if ("JSON".equals(out)) {
-            writeJson(response, keyList, rows);
-        } else {
-            writeCsv(response, keyList, rows);
-        }
-    }
-
-    /* ===== Helpers de serialización ===== */
-
-    private static String kvToString(TsKvEntry e) {
-        Optional<KvEntry> v = e.getKv();
-        if (v.isEmpty()) return null;
-        KvEntry kv = v.get();
-        if (kv instanceof StringDataEntry) return ((StringDataEntry) kv).getValue();
-        if (kv instanceof LongDataEntry)   return String.valueOf(((LongDataEntry) kv).getValue());
-        if (kv instanceof DoubleDataEntry) return String.valueOf(((DoubleDataEntry) kv).getValue());
-        if (kv instanceof BooleanDataEntry)return String.valueOf(((BooleanDataEntry) kv).getValue());
-        if (kv instanceof JsonDataEntry)   return ((JsonDataEntry) kv).getJsonValue();
-        return kv.getValueAsString();
-    }
-
-    private void writeCsv(HttpServletResponse response, List<String> keyList, NavigableMap<Long, String[]> rows) throws Exception {
-        String filename = "data_export_" + System.currentTimeMillis() + ".csv";
-        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-        response.setContentType("text/csv");
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("timestamp");
-        for (String k : keyList) sb.append(',').append(escapeCsv(k));
-        sb.append('\n');
-        response.getWriter().write(sb.toString());
-        sb.setLength(0);
-
-        for (Map.Entry<Long, String[]> en : rows.entrySet()) {
-            long ts = en.getKey();
-            String[] cols = en.getValue();
-            sb.append(ts);
-            for (int i = 0; i < keyList.size(); i++) {
-                sb.append(',');
-                String v = (cols != null && i < cols.length) ? cols[i] : null;
-                if (v != null) sb.append(escapeCsv(v));
-            }
-            sb.append('\n');
-            response.getWriter().write(sb.toString());
-            sb.setLength(0);
-        }
-        response.getWriter().flush();
-        response.flushBuffer();
-    }
-
-    private void writeJson(HttpServletResponse response, List<String> keyList, NavigableMap<Long, String[]> rows) throws Exception {
-        String filename = "data_export_" + System.currentTimeMillis() + ".json";
-        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-        response.setContentType("application/json");
-
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
-        for (Map.Entry<Long, String[]> en : rows.entrySet()) {
-            if (!first) sb.append(',');
-            first = false;
-            sb.append('{');
-            sb.append("\"timestamp\":").append(en.getKey());
-            String[] cols = en.getValue();
-            for (int i = 0; i < keyList.size(); i++) {
-                sb.append(',');
-                sb.append('"').append(jsonEscape(keyList.get(i))).append('"').append(':');
-                String v = (cols != null && i < cols.length) ? cols[i] : null;
-                if (v == null) {
-                    sb.append("null");
-                } else if (isNumeric(v) || "true".equalsIgnoreCase(v) || "false".equalsIgnoreCase(v)) {
-                    sb.append(v);
-                } else {
-                    sb.append('"').append(jsonEscape(v)).append('"');
+        switch (format) {
+            case JSON:
+                // JSON: agrupado por key -> [{ts, value}]
+                Map<String, List<Map<String, Object>>> json = new LinkedHashMap<>();
+                for (String k : keys) {
+                    json.put(k, new ArrayList<>());
                 }
-            }
-            sb.append('}');
+                for (TsKvEntry e : entries) {
+                    String key = e.getKey();
+                    if (!json.containsKey(key)) continue;
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("ts", e.getTs());
+                    row.put("value", valueAsString(e));
+                    json.get(key).add(row);
+                }
+                byte[] jsonBytes = JacksonUtil.toString(json).getBytes(StandardCharsets.UTF_8);
+                response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"data_export_" + Instant.ofEpochMilli(now) + ".json\"");
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                compressResponseWithGzipIFAccepted(acceptEncodingHeader, response, jsonBytes);
+                break;
+
+            case CSV:
+            default:
+                // CSV: columnas: key,ts,value
+                StringBuilder sb = new StringBuilder();
+                sb.append("key,ts,value\n");
+                for (TsKvEntry e : entries) {
+                    sb.append(escapeCsv(e.getKey())).append(',')
+                      .append(e.getTs()).append(',')
+                      .append(escapeCsv(valueAsString(e))).append('\n');
+                }
+                byte[] csvBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+                response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"data_export_" + Instant.ofEpochMilli(now) + ".csv\"");
+                response.setContentType("text/csv; charset=UTF-8");
+                try (OutputStream os = response.getOutputStream()) {
+                    os.write(csvBytes);
+                    os.flush();
+                }
+                break;
         }
-        sb.append(']');
-        response.getWriter().write(sb.toString());
-        response.getWriter().flush();
-        response.flushBuffer();
     }
 
-    private static String escapeCsv(String s) {
+    private List<String> parseKeys(String keysParam) {
+        if (keysParam == null || keysParam.isBlank()) return Collections.emptyList();
+        return Arrays.stream(keysParam.split(","))
+                .map(k -> URLDecoder.decode(k.trim(), StandardCharsets.UTF_8))
+                .filter(k -> !k.isBlank())
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    // En esta rama de TB los getters devuelven Optional<>, así que los tratamos seguro.
+    private String valueAsString(TsKvEntry e) {
+        if (e.getStrValue().isPresent()) return e.getStrValue().get();
+        if (e.getLongValue().isPresent()) return String.valueOf(e.getLongValue().get());
+        if (e.getDoubleValue().isPresent()) return String.valueOf(e.getDoubleValue().get());
+        if (e.getBooleanValue().isPresent()) return String.valueOf(e.getBooleanValue().get());
+        if (e.getJsonValue().isPresent()) return e.getJsonValue().get();
+        return "";
+    }
+
+    private String escapeCsv(String s) {
         if (s == null) return "";
-        boolean hasComma = s.indexOf(',') >= 0;
-        boolean hasQuote = s.indexOf('"') >= 0;
-        boolean hasNL = s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0;
-        if (hasComma || hasQuote || hasNL) return '"' + s.replace("\"", "\"\"") + '"';
-        return s;
+        boolean mustQuote = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r");
+        String v = s.replace("\"", "\"\"");
+        return mustQuote ? "\"" + v + "\"" : v;
     }
 
-    private static String jsonEscape(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
-    }
-
-    private static boolean isNumeric(String s) {
-        if (s == null || s.isEmpty()) return false;
-        char c0 = s.charAt(0);
-        if (!(Character.isDigit(c0) || c0 == '-' || c0 == '+')) return false;
-        try { Double.parseDouble(s); return true; } catch (Exception e) { return false; }
+    private UUID toUUID(String id) throws ThingsboardException {
+        try {
+            return UUID.fromString(id);
+        } catch (Exception e) {
+            throw new ThingsboardException("Invalid UUID: " + id, ThingsboardErrorCode.BAD_REQUEST_PARAMS);
+        }
     }
 }

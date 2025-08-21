@@ -111,10 +111,14 @@ public class DataExportController extends BaseController {
             interval = 0L; // explícito en RAW
         }
 
-        final int limit = 100_000; // límite razonable por consulta
+        final long fStartTs = startTs;         // copia final 
+        final long fEndTs   = endTs;           // copia final
+        final long fInterval = interval;       // copia final
+        final Aggregation fAgg = aggregation;  // copia final
+        
         List<ReadTsKvQuery> queries = keys.stream()
-                .map(k -> new BaseReadTsKvQuery(k, startTs, endTs, interval, limit, aggregation))
-                .collect(Collectors.toList());
+        .map(k -> new BaseReadTsKvQuery(k, fStartTs, fEndTs, fInterval, fLimit, fAgg))
+        .collect(Collectors.toList());
 
         List<TsKvEntry> entries = timeseriesService.findAll(tenantId, deviceId, queries).get();
 

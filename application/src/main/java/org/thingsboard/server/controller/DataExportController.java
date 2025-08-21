@@ -111,6 +111,7 @@ public class DataExportController extends BaseController {
             interval = 0L; // explícito en RAW
         }
 
+        final int fLimit = 100_000;
         final long fStartTs = startTs;         // copia final 
         final long fEndTs   = endTs;           // copia final
         final long fInterval = interval;       // copia final

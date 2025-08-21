@@ -21,21 +21,23 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.thingsboard.server.common.data.EntityType;
+
+import org.thingsboard.common.util.JacksonUtil;
+
 import org.thingsboard.server.common.data.Device;
+import org.thingsboard.server.common.data.EntityType;
 import org.thingsboard.server.common.data.exception.ThingsboardErrorCode;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
 import org.thingsboard.server.common.data.id.DeviceId;
-import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.kv.Aggregation;
 import org.thingsboard.server.common.data.kv.BaseReadTsKvQuery;
 import org.thingsboard.server.common.data.kv.ReadTsKvQuery;
 import org.thingsboard.server.common.data.kv.TsKvEntry;
 import org.thingsboard.server.config.annotations.ApiOperation;
+import org.thingsboard.server.dao.timeseries.TimeseriesService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.security.permission.Operation;
-import org.thingsboard.server.dao.timeseries.TimeseriesService;
 
 import java.io.OutputStream;
 import java.net.URLDecoder;
@@ -56,7 +58,7 @@ public class DataExportController extends BaseController {
 
     @ApiOperation(value = "Export time-series data (exportData)")
     @PreAuthorize("hasAnyAuthority('TENANT_ADMIN','CUSTOMER_USER')")
-    @GetMapping(value = "/data_export/{entityType}/{entityId}")
+    @GetMapping(value = {"/data_export/{entityType}/{entityId}", "/data-export/{entityType}/{entityId}"})
     public void exportData(@PathVariable("entityType") String strEntityType,
                            @PathVariable("entityId") String strEntityId,
                            @RequestParam("keys") String keysParam,
@@ -68,7 +70,6 @@ public class DataExportController extends BaseController {
                            @RequestHeader(name = HttpHeaders.ACCEPT_ENCODING, required = false) String acceptEncodingHeader,
                            HttpServletResponse response) throws Exception {
 
-        // Validaciones básicas
         if (!"DEVICE".equalsIgnoreCase(strEntityType)) {
             throw new ThingsboardException("Only DEVICE entityType is supported",
                     ThingsboardErrorCode.BAD_REQUEST_PARAMS);
@@ -79,13 +80,13 @@ public class DataExportController extends BaseController {
         }
         long now = System.currentTimeMillis();
         if (endTs > now) {
-            endTs = now; // Acotar al presente
+            endTs = now;
         }
 
-        // Entidad y permisos (lectura de telemetría)
-        DeviceId deviceId = new DeviceId(toUUID(strEntityId));
+        // Permisos y pertenencia
+        DeviceId deviceId = new DeviceId(toUUID(strEntityId)); // usa el de BaseController
         Device device = checkDeviceId(deviceId, Operation.READ_TELEMETRY);
-        TenantId tenantId = getTenantId(); // del usuario actual
+        TenantId tenantId = getTenantId();
 
         // Claves
         List<String> keys = parseKeys(keysParam);
@@ -107,44 +108,33 @@ public class DataExportController extends BaseController {
                     ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
         if (aggregation == Aggregation.NONE) {
-            // En consultas RAW, ThingsBoard ignora 'interval', pero lo dejamos en 0 explícitamente
-            interval = 0L;
+            interval = 0L; // explícito en RAW
         }
 
-        // Límite de puntos: usa un valor alto razonable para export (evita Integer.MAX_VALUE).
-        final int limit = 100_000;
-
-        // Construir queries por clave (orden ASC por defecto)
+        final int limit = 100_000; // límite razonable por consulta
         List<ReadTsKvQuery> queries = keys.stream()
                 .map(k -> new BaseReadTsKvQuery(k, startTs, endTs, interval, limit, aggregation))
                 .collect(Collectors.toList());
 
-        // Ejecutar consulta (la API devuelve una Future)
         List<TsKvEntry> entries = timeseriesService.findAll(tenantId, deviceId, queries).get();
 
-        // Formato de salida
-        DataExportFormat format;
-        try {
-            format = DataExportFormat.valueOf(formatStr.toUpperCase(Locale.ROOT));
-        } catch (Exception e) {
-            throw new ThingsboardException("Invalid format parameter: " + formatStr,
-                    ThingsboardErrorCode.BAD_REQUEST_PARAMS);
-        }
+        DataExportFormat format = DataExportFormat.valueOf(formatStr.toUpperCase(Locale.ROOT));
 
         switch (format) {
-            case JSON:
-                // JSON: agrupado por key -> [{ts, value}]
+            case JSON: {
+                // JSON agrupado por key: { "key": [ {ts, value}, ... ], ... }
                 Map<String, List<Map<String, Object>>> json = new LinkedHashMap<>();
                 for (String k : keys) {
                     json.put(k, new ArrayList<>());
                 }
                 for (TsKvEntry e : entries) {
                     String key = e.getKey();
-                    if (!json.containsKey(key)) continue;
+                    List<Map<String, Object>> arr = json.get(key);
+                    if (arr == null) continue;
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("ts", e.getTs());
                     row.put("value", valueAsString(e));
-                    json.get(key).add(row);
+                    arr.add(row);
                 }
                 byte[] jsonBytes = JacksonUtil.toString(json).getBytes(StandardCharsets.UTF_8);
                 response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
@@ -152,10 +142,10 @@ public class DataExportController extends BaseController {
                 response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                 compressResponseWithGzipIFAccepted(acceptEncodingHeader, response, jsonBytes);
                 break;
-
+            }
             case CSV:
-            default:
-                // CSV: columnas: key,ts,value
+            default: {
+                // CSV de 3 columnas: key,ts,value
                 StringBuilder sb = new StringBuilder();
                 sb.append("key,ts,value\n");
                 for (TsKvEntry e : entries) {
@@ -172,6 +162,7 @@ public class DataExportController extends BaseController {
                     os.flush();
                 }
                 break;
+            }
         }
     }
 
@@ -184,7 +175,7 @@ public class DataExportController extends BaseController {
                 .collect(Collectors.toList());
     }
 
-    // En esta rama de TB los getters devuelven Optional<>, así que los tratamos seguro.
+    // TsKvEntry getters devuelven Optional<> en esta rama
     private String valueAsString(TsKvEntry e) {
         if (e.getStrValue().isPresent()) return e.getStrValue().get();
         if (e.getLongValue().isPresent()) return String.valueOf(e.getLongValue().get());
@@ -199,13 +190,5 @@ public class DataExportController extends BaseController {
         boolean mustQuote = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r");
         String v = s.replace("\"", "\"\"");
         return mustQuote ? "\"" + v + "\"" : v;
-    }
-
-    private UUID toUUID(String id) throws ThingsboardException {
-        try {
-            return UUID.fromString(id);
-        } catch (Exception e) {
-            throw new ThingsboardException("Invalid UUID: " + id, ThingsboardErrorCode.BAD_REQUEST_PARAMS);
-        }
     }
 }

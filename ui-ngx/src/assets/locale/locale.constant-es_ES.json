@@ -674,16 +674,26 @@
     "system": "Sistema"
   },
      "data_export": {
-    "title": "Exportar datos",
-    "export": "Exportar datos",
-    "select_device": "Selecciona dispositivo",
+    "export": "Exportación de datos",
+    "title": "Exportación de datos",
+    "select_devices": "Selecciona dispositivos",
     "select_keys": "Selecciona claves",
-    "start": "Inicio",
-    "end": "Fin",
-    "interval_ms": "Intervalo",
-    "aggregation": "Agregación",
+    "start": "Fecha de inicio",
+    "end": "Fecha de fin",
     "format": "Formato",
-    "export_btn": "Exportar"
+    "export_btn": "Exportar",
+    "error_start_after_end": "La fecha de inicio debe ser anterior a la de fin.",
+    "error_end_in_future": "La fecha de fin no puede estar en el futuro.",
+    "schedule_title": "Programar respaldos por correo",
+    "all_devices": "Todos los dispositivos de mi cuenta",
+    "email": "Correo de destino",
+    "lookback_hours": "Ventana (horas)",
+    "period": "Periodo",
+    "daily": "Diario",
+    "weekly": "Semanal (Lunes)",
+    "monthly": "Mensual (día 1)",
+    "time": "Hora del día",
+    "schedule_btn": "Programar"
   },
   
   "alias": {

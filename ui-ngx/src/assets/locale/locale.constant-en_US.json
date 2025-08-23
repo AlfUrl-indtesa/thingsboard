@@ -728,17 +728,28 @@
         "all-entities": "All entities",
         "any-relation": "any"
     },
-    "data_export": {
-    "title": "Data export",
+    
+     "data_export": {
     "export": "Data export",
-    "select_device": "Select device",
+    "title": "Data export",
+    "select_devices": "Select devices",
     "select_keys": "Select keys",
-    "start": "Start",
-    "end": "End",
-    "interval_ms": "Interval",
-    "aggregation": "Aggregation",
+    "start": "Start date",
+    "end": "End date",
     "format": "Format",
-    "export_btn": "Export"
+    "export_btn": "Export",
+    "error_start_after_end": "Start must be before End.",
+    "error_end_in_future": "End cannot be in the future.",
+    "schedule_title": "Schedule backups by email",
+    "all_devices": "All devices in my account",
+    "email": "Recipient email",
+    "lookback_hours": "Lookback (hours)",
+    "period": "Period",
+    "daily": "Daily",
+    "weekly": "Weekly (Mon)",
+    "monthly": "Monthly (1st)",
+    "time": "Time of day",
+    "schedule_btn": "Schedule"
   },
   
     "asset": {

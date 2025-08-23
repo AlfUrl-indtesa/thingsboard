@@ -1,20 +1,20 @@
-/*
- * Data Export Page Styles
- * Ubicación: ui-ngx/src/app/modules/home/pages/data-export/data-exportpage.scss
- */
-.data-export-page {
-padding: 16px;
-.header {
-margin-bottom: 16px;
+.data-export {
+  max-width: 1100px;
 }
-.form-grid {
-display: grid;
-grid-template-columns: repeat(2, minmax(260px, 1fr));
-gap: 16px;
-margin-bottom: 16px;
+
+.form-grid, .schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
 }
+
 .actions {
-display: flex;
-gap: 12px;
+  margin: 12px 0 24px 0;
 }
+
+.errors {
+  margin-top: -8px;
+  margin-bottom: 8px;
+  color: #c62828;
 }

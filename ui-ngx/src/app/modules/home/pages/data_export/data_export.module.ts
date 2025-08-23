@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormsModule } from '@angular/forms';
+
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule }  from '@angular/material/input';
@@ -10,6 +11,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDividerModule } from '@angular/material/divider';
 
+import { SharedModule } from '@shared/shared.module'; // <- expone el pipe "translate"
 import { DataExportRoutingModule } from './data_export_routing.module';
 import { DataExportPageComponent } from './data_export_page.component';
 
@@ -17,6 +19,7 @@ import { DataExportPageComponent } from './data_export_page.component';
   declarations: [DataExportPageComponent],
   imports: [
     CommonModule,
+    SharedModule,            // <- agrega esto
     ReactiveFormsModule,
     FormsModule,
     MatFormFieldModule,

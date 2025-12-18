@@ -11,7 +11,13 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDividerModule } from '@angular/material/divider';
 
-import { SharedModule } from '@shared/shared.module'; // <- expone el pipe "translate"
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+// Opcional si usas chips:
+import { MatChipsModule } from '@angular/material/chips';
+
+import { SharedModule } from '@shared/shared.module';
 import { DataExportRoutingModule } from './data_export_routing.module';
 import { DataExportPageComponent } from './data_export_page.component';
 
@@ -19,9 +25,10 @@ import { DataExportPageComponent } from './data_export_page.component';
   declarations: [DataExportPageComponent],
   imports: [
     CommonModule,
-    SharedModule,            // <- agrega esto
+    SharedModule,
     ReactiveFormsModule,
     FormsModule,
+
     MatFormFieldModule,
     MatSelectModule,
     MatInputModule,
@@ -30,6 +37,11 @@ import { DataExportPageComponent } from './data_export_page.component';
     MatNativeDateModule,
     MatSlideToggleModule,
     MatDividerModule,
+
+    MatCardModule,
+    MatIconModule,
+    MatProgressSpinnerModule,
+    MatChipsModule, // <- descomenta si dejas chips
     DataExportRoutingModule
   ]
 })

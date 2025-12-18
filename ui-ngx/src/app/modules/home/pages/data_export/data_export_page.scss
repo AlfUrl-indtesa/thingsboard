@@ -1,20 +1,87 @@
-.data-export {
-  max-width: 1100px;
+/* --- Form fields: alineación y consistencia --- */
+:host ::ng-deep .mat-mdc-form-field {
+  width: 100%;
 }
 
-.form-grid, .schedule-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+:host ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 48px;
 }
 
-.actions {
-  margin: 12px 0 24px 0;
+/* El input type=time suele verse más bajo; lo compensamos */
+:host ::ng-deep input[type="time"].mat-mdc-input-element {
+  padding-top: 2px;
 }
 
-.errors {
-  margin-top: -8px;
-  margin-bottom: 8px;
-  color: #c62828;
+/* --- Hints con spinner: alineación --- */
+:host ::ng-deep .mat-mdc-form-field-hint-wrapper {
+  align-items: center;
+}
+
+:host ::ng-deep .mat-mdc-form-field-hint-wrapper mat-progress-spinner {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+/* --- Card polish --- */
+.tb-card {
+  overflow: hidden; /* evita que fondos internos se vean "cortados" */
+}
+
+/* --- Range block: más TB y menos “caja gris” --- */
+.range {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.range-head mat-icon {
+  opacity: 0.85;
+}
+
+.range-grid {
+  align-items: start;
+}
+
+/* --- Chips: wrap limpio y consistente --- */
+:host ::ng-deep mat-chip-listbox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:host ::ng-deep mat-chip-option {
+  margin: 0 !important;
+}
+
+/* --- Footer actions: look TB --- */
+.card-actions {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  margin-top: 4px;
+}
+
+/* --- Nota / errores: un poco más “material” --- */
+.errors,
+.note {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* --- Dark mode: evita grises feos y bordes muy marcados --- */
+@media (prefers-color-scheme: dark) {
+  .range {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .card-actions {
+    border-top-color: rgba(255, 255, 255, 0.10);
+  }
+
+  .errors,
+  .note {
+    border-color: rgba(255, 255, 255, 0.10);
+  }
+
+  .subtitle {
+    opacity: 0.8;
+  }
 }

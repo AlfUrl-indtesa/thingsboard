@@ -2,7 +2,7 @@
  * Copyright © 2016-2025 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * You may not use this file except in compliance with the License.
+ * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
@@ -132,18 +132,10 @@ public class DataExportController extends BaseController {
                 os.flush();
             }
         } else {
-            StringBuilder sb = new StringBuilder();
-            sb.append("key,ts,value\n");
-            for (TsKvEntry e : entries) {
-                sb.append(escapeCsv(e.getKey())).append(',')
-                  .append(e.getTs()).append(',')
-                  .append(escapeCsv(valueAsString(e))).append('\n');
-            }
-            byte[] csvBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
             response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"data_export_" + Instant.ofEpochMilli(now) + ".csv\"");
             response.setContentType("text/csv; charset=UTF-8");
             try (OutputStream os = response.getOutputStream()) {
-                os.write(csvBytes);
+                writePivotCsv(os, keys, entries);
                 os.flush();
             }
         }
@@ -263,11 +255,11 @@ public class DataExportController extends BaseController {
     }
 
     private String valueAsString(TsKvEntry e) {
-        if (e.getStrValue().isPresent())    return e.getStrValue().get();
-        if (e.getLongValue().isPresent())   return String.valueOf(e.getLongValue().get());
-        if (e.getDoubleValue().isPresent()) return String.valueOf(e.getDoubleValue().get());
-        if (e.getBooleanValue().isPresent())return String.valueOf(e.getBooleanValue().get());
-        if (e.getJsonValue().isPresent())   return e.getJsonValue().get();
+        if (e.getStrValue().isPresent())     return e.getStrValue().get();
+        if (e.getLongValue().isPresent())    return String.valueOf(e.getLongValue().get());
+        if (e.getDoubleValue().isPresent())  return String.valueOf(e.getDoubleValue().get());
+        if (e.getBooleanValue().isPresent()) return String.valueOf(e.getBooleanValue().get());
+        if (e.getJsonValue().isPresent())    return e.getJsonValue().get();
         return "";
     }
 
@@ -276,6 +268,55 @@ public class DataExportController extends BaseController {
         boolean mustQuote = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r");
         String v = s.replace("\"", "\"\"");
         return mustQuote ? "\"" + v + "\"" : v;
+    }
+
+    /**
+     * CSV pivotado: una fila por timestamp, columnas por key, incluye ISO legible.
+     * Header: ts,iso,<key1>,<key2>,...
+     */
+    private void writePivotCsv(OutputStream os, List<String> keys, List<TsKvEntry> entries) throws Exception {
+        // BOM UTF-8 para Excel
+        os.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+
+        // Header
+        StringBuilder header = new StringBuilder();
+        header.append("ts,iso");
+        for (String k : keys) {
+            header.append(',').append(escapeCsv(k));
+        }
+        header.append('\n');
+        os.write(header.toString().getBytes(StandardCharsets.UTF_8));
+
+        // Filas por timestamp (orden ascendente)
+        // ts -> (key -> value)
+        TreeMap<Long, Map<String, String>> byTs = new TreeMap<>();
+        // Set para filtrar rápido (evita O(n) por contains)
+        Set<String> keySet = new HashSet<>(keys);
+
+        for (TsKvEntry e : entries) {
+            if (!keySet.contains(e.getKey())) continue;
+            byTs.computeIfAbsent(e.getTs(), t -> new HashMap<>())
+                    .put(e.getKey(), valueAsString(e));
+        }
+
+        StringBuilder row = new StringBuilder(512);
+        for (Map.Entry<Long, Map<String, String>> it : byTs.entrySet()) {
+            long ts = it.getKey();
+            Map<String, String> rowMap = it.getValue();
+
+            row.setLength(0);
+            row.append(ts).append(',').append(escapeCsv(Instant.ofEpochMilli(ts).toString()));
+
+            for (String k : keys) {
+                row.append(',');
+                String v = rowMap.get(k);
+                if (v != null && !v.isEmpty()) {
+                    row.append(escapeCsv(v));
+                }
+            }
+            row.append('\n');
+            os.write(row.toString().getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     private byte[] generateZipForDevices(List<String> deviceIds, List<String> keys,
@@ -299,8 +340,8 @@ public class DataExportController extends BaseController {
                 List<TsKvEntry> entries = timeseriesService.findAll(tenantId, deviceId, queries).get();
 
                 String entryName = "device_" + devIdStr + (format == DataExportFormat.JSON ? ".json" : ".csv");
-
                 zip.putNextEntry(new ZipEntry(entryName));
+
                 if (format == DataExportFormat.JSON) {
                     Map<String, List<Map<String, Object>>> json = new LinkedHashMap<>();
                     for (String k : keys) json.put(k, new ArrayList<>());
@@ -315,15 +356,10 @@ public class DataExportController extends BaseController {
                     byte[] bytes = JacksonUtil.toString(json).getBytes(StandardCharsets.UTF_8);
                     zip.write(bytes);
                 } else {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("key,ts,value\n");
-                    for (TsKvEntry e : entries) {
-                        sb.append(escapeCsv(e.getKey())).append(',')
-                          .append(e.getTs()).append(',')
-                          .append(escapeCsv(valueAsString(e))).append('\n');
-                    }
-                    zip.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+                    // CSV pivotado dentro del ZIP (con BOM)
+                    writePivotCsv(zip, keys, entries);
                 }
+
                 zip.closeEntry();
             }
             zip.finish();

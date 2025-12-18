@@ -749,7 +749,15 @@
     "weekly": "Weekly (Mon)",
     "monthly": "Monthly (1st)",
     "time": "Time of day",
-    "schedule_btn": "Schedule"
+    "schedule_btn": "Schedule",
+    "subtitle": "Export raw telemetry with a defined time range.",
+    "select_devices_first": "Select at least one device to load keys.",
+    "config_title": "Export configuration",
+    "config_subtitle": "Select devices, keys, time range and format.",
+    "range": "Time range",
+    "range_help": "End cannot be in the future.",
+    "schedule_subtitle": "Schedule recurring exports to an email.",
+    "schedule_note_keys": "Scheduling uses the same keys selected for export."
   },
   
     "asset": {

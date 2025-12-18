@@ -693,7 +693,15 @@
     "weekly": "Semanal (Lunes)",
     "monthly": "Mensual (día 1)",
     "time": "Hora del día",
-    "schedule_btn": "Programar"
+    "schedule_btn": "Programar",
+    "subtitle": "Exporta telemetría sin agregación con un rango de tiempo definido.",
+    "select_devices_first": "Selecciona al menos un dispositivo para cargar claves.",
+    "config_title": "Configuración de exportación",
+    "config_subtitle": "Selecciona dispositivos, claves, rango y formato.",
+    "range": "Rango de tiempo",
+    "range_help": "El fin no puede estar en el futuro.",
+    "schedule_subtitle": "Programa exportaciones recurrentes a un correo.",
+    "schedule_note_keys": "La programación usa las mismas claves seleccionadas en la exportación."
   },
   
   "alias": {

@@ -1,110 +1,211 @@
-<div class="data-export" [formGroup]="form">
-  <h1>{{ 'data_export.title' | translate }}</h1>
+<div class="data-export-page">
 
-  <section class="form-grid">
-    <!-- Dispositivos -->
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.select_devices' | translate }}</mat-label>
-      <mat-select formControlName="deviceIds" multiple [disabled]="loadingDevices">
-        <mat-option *ngFor="let d of devices" [value]="d.id.id">{{ d.name }}</mat-option>
-      </mat-select>
-      <mat-hint *ngIf="loadingDevices">{{ 'action.loading' | translate }}</mat-hint>
-    </mat-form-field>
-
-    <!-- Claves -->
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.select_keys' | translate }}</mat-label>
-      <mat-select formControlName="keys" multiple [disabled]="loadingKeys || !form.get('deviceIds')?.value?.length">
-        <mat-option *ngFor="let k of availableKeys" [value]="k">{{ k }}</mat-option>
-      </mat-select>
-      <mat-hint *ngIf="loadingKeys">{{ 'action.loading' | translate }}</mat-hint>
-    </mat-form-field>
-
-    <!-- Inicio -->
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.start' | translate }}</mat-label>
-      <input matInput [matDatepicker]="pickerStart" formControlName="startDate">
-      <mat-datepicker-toggle matSuffix [for]="pickerStart"></mat-datepicker-toggle>
-      <mat-datepicker #pickerStart></mat-datepicker>
-    </mat-form-field>
-    <mat-form-field appearance="fill">
-      <mat-label>HH:MM</mat-label>
-      <input matInput type="time" formControlName="startTime">
-    </mat-form-field>
-
-    <!-- Fin -->
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.end' | translate }}</mat-label>
-      <input matInput [matDatepicker]="pickerEnd" formControlName="endDate">
-      <mat-datepicker-toggle matSuffix [for]="pickerEnd"></mat-datepicker-toggle>
-      <mat-datepicker #pickerEnd></mat-datepicker>
-    </mat-form-field>
-    <mat-form-field appearance="fill">
-      <mat-label>HH:MM</mat-label>
-      <input matInput type="time" formControlName="endTime">
-    </mat-form-field>
-
-    <!-- Formato -->
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.format' | translate }}</mat-label>
-      <mat-select formControlName="format">
-        <mat-option *ngFor="let f of formats" [value]="f">{{ f }}</mat-option>
-      </mat-select>
-    </mat-form-field>
-  </section>
-
-  <!-- Errores de rango -->
-  <div class="errors">
-    <mat-error *ngIf="form.hasError('startAfterEnd')">{{ 'data_export.error_start_after_end' | translate }}</mat-error>
-    <mat-error *ngIf="form.hasError('endInFuture')">{{ 'data_export.error_end_in_future' | translate }}</mat-error>
+  <!-- Header -->
+  <div class="page-header">
+    <div class="page-title">
+      <mat-icon class="page-icon">description</mat-icon>
+      <div>
+        <div class="h1">{{ 'data_export.title' | translate }}</div>
+        <div class="subtitle">{{ 'data_export.subtitle' | translate }}</div>
+      </div>
+    </div>
   </div>
 
-  <div class="actions">
-    <button mat-flat-button color="primary" (click)="export()" [disabled]="form.invalid">
-      {{ 'data_export.export_btn' | translate }}
-    </button>
-  </div>
+  <!-- EXPORT -->
+  <mat-card class="tb-card" [formGroup]="form">
+    <mat-card-header>
+      <mat-card-title>
+        <span class="card-title">
+          <mat-icon>tune</mat-icon>
+          {{ 'data_export.config_title' | translate }}
+        </span>
+      </mat-card-title>
+      <mat-card-subtitle>{{ 'data_export.config_subtitle' | translate }}</mat-card-subtitle>
+    </mat-card-header>
 
-  <mat-divider></mat-divider>
+    <mat-card-content>
+      <div class="form-grid">
 
-  <!-- Programación -->
-  <h2>{{ 'data_export.schedule_title' | translate }}</h2>
-  <form [formGroup]="scheduleForm" class="schedule-grid">
-    <mat-slide-toggle formControlName="allDevices">{{ 'data_export.all_devices' | translate }}</mat-slide-toggle>
+        <!-- Dispositivos -->
+        <mat-form-field appearance="fill" class="span-2">
+          <mat-label>{{ 'data_export.select_devices' | translate }}</mat-label>
+          <mat-select formControlName="deviceIds" multiple [disabled]="loadingDevices">
+            <mat-option *ngFor="let d of devices" [value]="d.id.id">{{ d.name }}</mat-option>
+          </mat-select>
 
-    <mat-form-field appearance="fill" *ngIf="!scheduleForm.get('allDevices')?.value">
-      <mat-label>{{ 'data_export.select_devices' | translate }}</mat-label>
-      <mat-select formControlName="deviceIds" multiple>
-        <mat-option *ngFor="let d of devices" [value]="d.id.id">{{ d.name }}</mat-option>
-      </mat-select>
-    </mat-form-field>
+          <mat-hint *ngIf="loadingDevices">
+            <mat-progress-spinner diameter="14" mode="indeterminate"></mat-progress-spinner>
+            {{ 'action.loading' | translate }}
+          </mat-hint>
+        </mat-form-field>
 
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.email' | translate }}</mat-label>
-      <input matInput formControlName="email" placeholder="you@example.com">
-    </mat-form-field>
+        <!-- Claves -->
+        <mat-form-field appearance="fill" class="span-2">
+          <mat-label>{{ 'data_export.select_keys' | translate }}</mat-label>
+          <mat-select
+            formControlName="keys"
+            multiple
+            [disabled]="loadingKeys || !form.get('deviceIds')?.value?.length">
 
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.lookback_hours' | translate }}</mat-label>
-      <input matInput type="number" formControlName="lookbackHours" min="1">
-    </mat-form-field>
+            <mat-option *ngFor="let k of availableKeys" [value]="k">
+              {{ k }}
+            </mat-option>
+          </mat-select>
 
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.period' | translate }}</mat-label>
-      <mat-select formControlName="period">
-        <mat-option *ngFor="let p of periods" [value]="p.id">{{ p.label | translate }}</mat-option>
-      </mat-select>
-    </mat-form-field>
+          <mat-hint *ngIf="loadingKeys">
+            <mat-progress-spinner diameter="14" mode="indeterminate"></mat-progress-spinner>
+            {{ 'action.loading' | translate }}
+          </mat-hint>
 
-    <mat-form-field appearance="fill">
-      <mat-label>{{ 'data_export.time' | translate }}</mat-label>
-      <input matInput type="time" formControlName="time">
-    </mat-form-field>
+          <mat-hint *ngIf="!form.get('deviceIds')?.value?.length">
+            {{ 'data_export.select_devices_first' | translate }}
+          </mat-hint>
+        </mat-form-field>
 
-    <div class="actions">
-      <button mat-stroked-button color="primary" (click)="schedule()" [disabled]="scheduleForm.invalid">
+        <!-- Summary chips (se ve muy pro) -->
+        <div class="chips-row span-2" *ngIf="(form.get('keys')?.value || []).length">
+          <div class="chips-label">{{ 'data_export.selected_keys' | translate }}</div>
+          <mat-chip-listbox>
+            <mat-chip-option *ngFor="let k of (form.get('keys')?.value || [])" disabled>
+              {{ k }}
+            </mat-chip-option>
+          </mat-chip-listbox>
+        </div>
+
+        <!-- Rango -->
+        <div class="range span-2">
+          <div class="range-head">
+            <mat-icon>calendar_month</mat-icon>
+            <div>
+              <div class="range-title">{{ 'data_export.range' | translate }}</div>
+              <div class="range-subtitle">{{ 'data_export.range_help' | translate }}</div>
+            </div>
+          </div>
+
+          <div class="range-grid">
+            <!-- Inicio -->
+            <mat-form-field appearance="fill">
+              <mat-label>{{ 'data_export.start' | translate }}</mat-label>
+              <input matInput [matDatepicker]="pickerStart" formControlName="startDate">
+              <mat-datepicker-toggle matSuffix [for]="pickerStart"></mat-datepicker-toggle>
+              <mat-datepicker #pickerStart></mat-datepicker>
+            </mat-form-field>
+
+            <mat-form-field appearance="fill" class="time-field">
+              <mat-label>{{ 'data_export.time' | translate }}</mat-label>
+              <input matInput type="time" formControlName="startTime">
+            </mat-form-field>
+
+            <!-- Fin -->
+            <mat-form-field appearance="fill">
+              <mat-label>{{ 'data_export.end' | translate }}</mat-label>
+              <input matInput [matDatepicker]="pickerEnd" formControlName="endDate">
+              <mat-datepicker-toggle matSuffix [for]="pickerEnd"></mat-datepicker-toggle>
+              <mat-datepicker #pickerEnd></mat-datepicker>
+            </mat-form-field>
+
+            <mat-form-field appearance="fill" class="time-field">
+              <mat-label>{{ 'data_export.time' | translate }}</mat-label>
+              <input matInput type="time" formControlName="endTime">
+            </mat-form-field>
+          </div>
+
+          <!-- Errores de rango -->
+          <div class="errors" *ngIf="form.hasError('startAfterEnd') || form.hasError('endInFuture')">
+            <mat-icon>error</mat-icon>
+            <div class="errors-text">
+              <div *ngIf="form.hasError('startAfterEnd')">
+                {{ 'data_export.error_start_after_end' | translate }}
+              </div>
+              <div *ngIf="form.hasError('endInFuture')">
+                {{ 'data_export.error_end_in_future' | translate }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Formato -->
+        <mat-form-field appearance="fill">
+          <mat-label>{{ 'data_export.format' | translate }}</mat-label>
+          <mat-select formControlName="format">
+            <mat-option *ngFor="let f of formats" [value]="f">{{ f }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+      </div>
+    </mat-card-content>
+
+    <mat-card-actions align="end" class="card-actions">
+      <button mat-stroked-button type="button" (click)="form.reset()">
+        {{ 'action.reset' | translate }}
+      </button>
+      <button mat-flat-button color="primary" type="button" (click)="export()" [disabled]="form.invalid">
+        <mat-icon>download</mat-icon>
+        {{ 'data_export.export_btn' | translate }}
+      </button>
+    </mat-card-actions>
+  </mat-card>
+
+  <!-- SCHEDULE -->
+  <mat-card class="tb-card" [formGroup]="scheduleForm">
+    <mat-card-header>
+      <mat-card-title>
+        <span class="card-title">
+          <mat-icon>schedule</mat-icon>
+          {{ 'data_export.schedule_title' | translate }}
+        </span>
+      </mat-card-title>
+      <mat-card-subtitle>{{ 'data_export.schedule_subtitle' | translate }}</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <div class="schedule-grid">
+        <mat-slide-toggle formControlName="allDevices" class="span-2">
+          {{ 'data_export.all_devices' | translate }}
+        </mat-slide-toggle>
+
+        <mat-form-field appearance="fill" class="span-2" *ngIf="!scheduleForm.get('allDevices')?.value">
+          <mat-label>{{ 'data_export.select_devices' | translate }}</mat-label>
+          <mat-select formControlName="deviceIds" multiple>
+            <mat-option *ngFor="let d of devices" [value]="d.id.id">{{ d.name }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="span-2">
+          <mat-label>{{ 'data_export.email' | translate }}</mat-label>
+          <input matInput formControlName="email" placeholder="you@example.com">
+        </mat-form-field>
+
+        <mat-form-field appearance="fill">
+          <mat-label>{{ 'data_export.lookback_hours' | translate }}</mat-label>
+          <input matInput type="number" formControlName="lookbackHours" min="1">
+        </mat-form-field>
+
+        <mat-form-field appearance="fill">
+          <mat-label>{{ 'data_export.period' | translate }}</mat-label>
+          <mat-select formControlName="period">
+            <mat-option *ngFor="let p of periods" [value]="p.id">{{ p.label | translate }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="time-field">
+          <mat-label>{{ 'data_export.time' | translate }}</mat-label>
+          <input matInput type="time" formControlName="time">
+        </mat-form-field>
+
+        <div class="note span-2">
+          <mat-icon>info</mat-icon>
+          <span>{{ 'data_export.schedule_note_keys' | translate }}</span>
+        </div>
+      </div>
+    </mat-card-content>
+
+    <mat-card-actions align="end" class="card-actions">
+      <button mat-flat-button color="primary" type="button" (click)="schedule()" [disabled]="scheduleForm.invalid">
+        <mat-icon>send</mat-icon>
         {{ 'data_export.schedule_btn' | translate }}
       </button>
-    </div>
-  </form>
+    </mat-card-actions>
+  </mat-card>
+
 </div>

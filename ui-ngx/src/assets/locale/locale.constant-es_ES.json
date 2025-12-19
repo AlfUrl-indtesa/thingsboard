@@ -673,7 +673,7 @@
     "text": "Texto",
     "system": "Sistema"
   },
-     "data_export": {
+  "data_export": {
     "export": "Exportación de datos",
     "title": "Exportación de datos",
     "select_devices": "Selecciona dispositivos",

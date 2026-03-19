@@ -1,0 +1,111 @@
+<div class="tb-data-export-page">
+  <mat-card>
+    <mat-card-title>{{ 'data_export.title' | translate }}</mat-card-title>
+    <mat-card-subtitle>{{ 'data_export.subtitle' | translate }}</mat-card-subtitle>
+
+    <mat-card-content [formGroup]="form">
+      <div class="section">
+        <h3>{{ 'data_export.config_title' | translate }}</h3>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ 'data_export.select_devices' | translate }}</mat-label>
+          <mat-select formControlName="deviceIds" multiple (selectionChange)="onDevicesChanged()">
+            <mat-option *ngFor="let device of devices" [value]="device.id">
+              {{ device.name }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-checkbox formControlName="includeCalculatedFields" (change)="onIncludeFlagsChanged()">
+          Incluir campos calculados
+        </mat-checkbox>
+
+        <mat-checkbox formControlName="includeAttributes" (change)="onIncludeFlagsChanged()">
+          Incluir atributos / fields no temporales
+        </mat-checkbox>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ 'data_export.select_keys' | translate }}</mat-label>
+          <mat-select formControlName="keys" multiple>
+            <mat-option *ngFor="let key of telemetryKeys" [value]="key">
+              {{ key }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Atributos</mat-label>
+          <mat-select formControlName="attributeKeys" multiple>
+            <mat-option *ngFor="let key of attributeKeys" [value]="key">
+              {{ key }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-checkbox formControlName="autoDetectOldestTs">
+          Detectar automáticamente la fecha inicial más antigua
+        </mat-checkbox>
+
+        <div class="row">
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'data_export.start' | translate }}</mat-label>
+            <input matInput type="datetime-local">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'data_export.end' | translate }}</mat-label>
+            <input matInput type="datetime-local">
+          </mat-form-field>
+        </div>
+
+        <button mat-raised-button color="primary" (click)="exportData()" [disabled]="exporting">
+          {{ 'data_export.export_btn' | translate }}
+        </button>
+      </div>
+
+      <div class="section">
+        <h3>{{ 'data_export.schedule_title' | translate }}</h3>
+        <p>{{ 'data_export.schedule_subtitle' | translate }}</p>
+
+        <mat-checkbox formControlName="scheduleEnabled">
+          Habilitar backup semanal
+        </mat-checkbox>
+
+        <mat-checkbox formControlName="allDevices">
+          {{ 'data_export.all_devices' | translate }}
+        </mat-checkbox>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ 'data_export.email' | translate }}</mat-label>
+          <input matInput formControlName="email">
+        </mat-form-field>
+
+        <div class="row">
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'data_export.period' | translate }}</mat-label>
+            <mat-select formControlName="period">
+              <mat-option value="WEEKLY">{{ 'data_export.weekly' | translate }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'data_export.time' | translate }}</mat-label>
+            <input matInput type="time" formControlName="timeOfDay">
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Modo</mat-label>
+          <mat-select formControlName="mode">
+            <mat-option value="INCREMENTAL">Incremental</mat-option>
+            <mat-option value="FULL">Completo</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <button mat-raised-button color="accent" (click)="saveSchedule()" [disabled]="scheduling">
+          {{ 'data_export.schedule_btn' | translate }}
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

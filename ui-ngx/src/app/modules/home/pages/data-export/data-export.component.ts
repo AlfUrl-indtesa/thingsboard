@@ -10,11 +10,11 @@ import {
 
 @Component({
   selector: 'tb-data-export',
+  standalone: false,
   templateUrl: './data-export.component.html',
   styleUrls: ['./data-export.component.scss']
 })
 export class DataExportComponent implements OnInit {
-
   loading = false;
   exporting = false;
   scheduling = false;
@@ -80,9 +80,7 @@ export class DataExportComponent implements OnInit {
           mode: schedule.mode
         }, { emitEvent: false });
       },
-      error: () => {
-        // no-op
-      }
+      error: () => {}
     });
   }
 

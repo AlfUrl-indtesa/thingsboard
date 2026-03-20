@@ -1,10 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs/operators';
-import { saveAs } from 'file-saver';
 
 import { DataExportService } from './data-export.service';
-import { ExportableDevice, DataExportPreviewResponse } from './data-export.models';
+import {
+  ExportableDevice,
+  DataExportPreviewResponse
+} from './data-export.models';
 
 @Component({
   selector: 'tb-data-export',
@@ -27,8 +29,9 @@ export class DataExportComponent implements OnInit {
     attributeKeys: [[] as string[]],
     includeCalculatedFields: [true],
     includeAttributes: [true],
-    startTs: [null as number | null],
-    endTs: [Date.now(), Validators.required],
+
+    startDateTime: [''],
+    endDateTime: [this.toDateTimeLocal(Date.now()), Validators.required],
     autoDetectOldestTs: [true],
     format: ['csv' as 'csv', Validators.required],
 
@@ -73,12 +76,12 @@ export class DataExportComponent implements OnInit {
           email: schedule.email,
           period: schedule.period,
           timeOfDay: schedule.timeOfDay,
-          timezone: schedule.timezone,
+          timezone: schedule.timezone || 'America/Monterrey',
           mode: schedule.mode
-        });
+        }, { emitEvent: false });
       },
       error: () => {
-        // opcional: ignorar si no existe aún
+        // no-op
       }
     });
   }
@@ -105,11 +108,11 @@ export class DataExportComponent implements OnInit {
     this.attributeKeys = res.attributeKeys || [];
 
     const patch: any = {
-      endTs: res.defaultEndTs || Date.now()
+      endDateTime: this.toDateTimeLocal(res.defaultEndTs || Date.now())
     };
 
-    if (res.defaultStartTs !== undefined) {
-      patch.startTs = res.defaultStartTs;
+    if (res.defaultStartTs) {
+      patch.startDateTime = this.toDateTimeLocal(res.defaultStartTs);
     }
 
     if (res.suggestedEmail) {
@@ -125,8 +128,15 @@ export class DataExportComponent implements OnInit {
       return;
     }
 
-    const endTs = this.form.get('endTs')?.value!;
-    const startTs = this.form.get('startTs')?.value;
+    const startTs = this.form.get('autoDetectOldestTs')?.value
+      ? null
+      : this.fromDateTimeLocal(this.form.get('startDateTime')?.value || '');
+
+    const endTs = this.fromDateTimeLocal(this.form.get('endDateTime')?.value || '');
+
+    if (!endTs) {
+      return;
+    }
 
     if (!this.form.get('autoDetectOldestTs')?.value && startTs && startTs > endTs) {
       console.error('startTs cannot be greater than endTs');
@@ -147,7 +157,7 @@ export class DataExportComponent implements OnInit {
     }).pipe(
       finalize(() => this.exporting = false)
     ).subscribe({
-      next: (blob) => saveAs(blob, `thingsboard-export-${Date.now()}.csv`),
+      next: (blob) => this.downloadBlob(blob, `thingsboard-export-${Date.now()}.csv`),
       error: (err) => console.error('Error exporting CSV', err)
     });
   }
@@ -178,5 +188,31 @@ export class DataExportComponent implements OnInit {
       next: () => console.log('Schedule saved'),
       error: (err) => console.error('Error saving schedule', err)
     });
+  }
+
+  private downloadBlob(blob: Blob, fileName: string): void {
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(url);
+  }
+
+  private toDateTimeLocal(ts: number): string {
+    const d = new Date(ts);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  private fromDateTimeLocal(value: string): number | null {
+    if (!value) {
+      return null;
+    }
+    const parsed = new Date(value);
+    const time = parsed.getTime();
+    return Number.isNaN(time) ? null : time;
   }
 }

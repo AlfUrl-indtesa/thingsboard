@@ -43,7 +43,22 @@ export interface DataExportScheduleRequest {
   includeAttributes: boolean;
   email: string;
   period: 'WEEKLY';
-  timeOfDay: string;   // "08:00"
-  timezone?: string;   // "America/Monterrey"
+  timeOfDay: string;
+  timezone?: string;
+  mode: 'FULL' | 'INCREMENTAL';
+}
+
+export interface DataExportSchedule {
+  enabled: boolean;
+  allDevices: boolean;
+  deviceIds: string[];
+  keys: string[];
+  attributeKeys?: string[];
+  includeCalculatedFields: boolean;
+  includeAttributes: boolean;
+  email: string;
+  period: 'WEEKLY';
+  timeOfDay: string;
+  timezone?: string;
   mode: 'FULL' | 'INCREMENTAL';
 }

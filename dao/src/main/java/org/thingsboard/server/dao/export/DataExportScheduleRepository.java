@@ -1,4 +1,4 @@
-package main.java.org.thingsboard.server.dao.export;
+package org.thingsboard.server.dao.export;
 
 import org.thingsboard.server.common.data.export.DataExportSchedule;
 

@@ -36,7 +36,12 @@ public class DataExportController extends BaseController {
         SecurityUser user = getCurrentUser();
 
         StreamingResponseBody stream = outputStream -> {
-            dataExportService.writeCsv(user, request, outputStream);
+            try {
+                dataExportService.writeCsv(user, request, outputStream);
+            } catch (Exception e) {
+                log.error("Error al exportar los datos a CSV", e);
+                throw new RuntimeException("Error escribiendo el CSV", e);
+            }
         };
 
         String fileName = "thingsboard-export-" + System.currentTimeMillis() + ".csv";

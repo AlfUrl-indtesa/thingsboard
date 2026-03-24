@@ -1,4 +1,4 @@
-package main.java.org.thingsboard.server.common.data.export;
+package org.thingsboard.server.common.data.export;
 
 import lombok.Data;
 

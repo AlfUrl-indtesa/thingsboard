@@ -1,4 +1,4 @@
-package main.java.org.thingsboard.server.service.export;
+package org.thingsboard.server.controller;
 
 import org.thingsboard.server.common.data.export.DataExportPreviewRequest;
 import org.thingsboard.server.common.data.export.DataExportPreviewResponse;

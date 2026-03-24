@@ -1,4 +1,4 @@
-package org.thingsboard.server.controller;
+package org.thingsboard.server.service.export;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

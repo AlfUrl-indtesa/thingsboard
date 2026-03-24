@@ -1,4 +1,4 @@
-package org.thingsboard.server.controller;
+package org.thingsboard.server.service.export;
 
 import org.thingsboard.server.common.data.export.DataExportPreviewRequest;
 import org.thingsboard.server.common.data.export.DataExportPreviewResponse;

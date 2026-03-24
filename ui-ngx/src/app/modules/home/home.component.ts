@@ -34,6 +34,7 @@ import { RouterTabsComponent } from '@home/components/router-tabs.component';
 import { FormBuilder } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { isDefined, isDefinedAndNotNull } from '@core/utils';
+import { ThemeService } from '@app/core/services/theme.service';
 
 @Component({
     selector: 'tb-home',
@@ -71,11 +72,12 @@ export class HomeComponent extends PageComponent implements AfterViewInit, OnIni
   private destroy$ = new Subject<void>();
 
   constructor(protected store: Store<AppState>,
-              @Inject(WINDOW) private window: Window,
-              private activeComponentService: ActiveComponentService,
-              private fb: FormBuilder,
-              public breakpointObserver: BreakpointObserver) {
-    super(store);
+    @Inject(WINDOW) private window: Window,
+    private activeComponentService: ActiveComponentService,
+    private fb: FormBuilder,
+    public breakpointObserver: BreakpointObserver,
+    public themeService: ThemeService) {
+      super(store);
   }
 
   ngOnInit() {
@@ -128,6 +130,10 @@ export class HomeComponent extends PageComponent implements AfterViewInit, OnIni
 
   isFullscreen() {
     return screenfull.isFullscreen;
+  }
+
+  toggleTheme(): void {
+  this.themeService.toggleTheme();
   }
 
   goBack() {

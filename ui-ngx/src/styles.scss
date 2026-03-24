@@ -1342,6 +1342,30 @@ pre.tb-highlight {
       z-index: 1;
     }
   }
+  
+  body.tb-light {
+  --tb-bg: #f5f7fb;
+  --tb-surface: #ffffff;
+  --tb-card: #ffffff;
+  --tb-text: #1f2937;
+  --tb-text-secondary: #6b7280;
+  --tb-border: #dbe3ea;
+}
+
+body.tb-dark {
+  --tb-bg: #0f1720;
+  --tb-surface: #16202a;
+  --tb-card: #1b2632;
+  --tb-text: #e5eef5;
+  --tb-text-secondary: #9fb0c0;
+  --tb-border: #2a3948;
+}
+
+body.tb-light,
+body.tb-dark {
+  background-color: var(--tb-bg);
+  color: var(--tb-text);
+}
 }
 
 /***************

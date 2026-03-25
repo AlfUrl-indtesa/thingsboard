@@ -1343,29 +1343,141 @@ pre.tb-highlight {
     }
   }
   
-  body.tb-light {
-  --tb-bg: #f5f7fb;
-  --tb-surface: #ffffff;
-  --tb-card: #ffffff;
-  --tb-text: #1f2937;
-  --tb-text-secondary: #6b7280;
-  --tb-border: #dbe3ea;
-}
+/* =========================
+   Eficentra Dark Theme
+   ========================= */
 
 body.tb-dark {
-  --tb-bg: #0f1720;
-  --tb-surface: #16202a;
-  --tb-card: #1b2632;
-  --tb-text: #e5eef5;
-  --tb-text-secondary: #9fb0c0;
-  --tb-border: #2a3948;
+  --ef-bg: #06162B;
+  --ef-bg-secondary: #0B1F3A;
+  --ef-panel: #223B63;
+  --ef-panel-alt: #1B3152;
+  --ef-sidebar: #223B63;
+  --ef-header: #2E4F7E;
+  --ef-border: #162947;
+  --ef-text: #F3F6FA;
+  --ef-text-secondary: #B8C6D6;
+  --ef-accent: #2C95D1;
+  --ef-accent-soft: #3AAAE8;
+  --ef-divider: #E7E1D0;
+  --ef-alarm: #FF4438;
+  --ef-warning: #E79A21;
+  --ef-success: #25C26E;
+  --ef-neutral-tile: #1C2F4D;
+  --ef-input-bg: #162947;
+  --ef-overlay: #1B3152;
 }
 
-body.tb-light,
-body.tb-dark {
-  background-color: var(--tb-bg);
-  color: var(--tb-text);
+/* Fondo general */
+body.tb-dark,
+body.tb-dark .mat-app-background,
+body.tb-dark .tb-root,
+body.tb-dark .mat-drawer-container,
+body.tb-dark .mat-sidenav-container {
+  background-color: var(--ef-bg) !important;
+  color: var(--ef-text) !important;
 }
+
+/* Header superior */
+body.tb-dark .mat-toolbar,
+body.tb-dark .tb-header,
+body.tb-dark .header,
+body.tb-dark .mat-mdc-toolbar {
+  background-color: var(--ef-header) !important;
+  color: var(--ef-text) !important;
+}
+
+/* Sidebar / navegación */
+body.tb-dark .mat-drawer,
+body.tb-dark .mat-sidenav,
+body.tb-dark .tb-side-menu,
+body.tb-dark .tb-menu-panel,
+body.tb-dark .tb-menu,
+body.tb-dark .menu-section {
+  background-color: var(--ef-sidebar) !important;
+  color: var(--ef-text) !important;
+}
+
+/* Área principal */
+body.tb-dark .tb-main-content,
+body.tb-dark .mat-drawer-content,
+body.tb-dark .page-layout,
+body.tb-dark .tb-dashboard-page,
+body.tb-dark .dashboard-page,
+body.tb-dark .gridster {
+  background-color: var(--ef-bg-secondary) !important;
+  color: var(--ef-text) !important;
+}
+
+/* Tarjetas / widgets */
+body.tb-dark .mat-mdc-card,
+body.tb-dark .mat-card,
+body.tb-dark .tb-widget,
+body.tb-dark .widget-container,
+body.tb-dark .tb-dashboard-widget,
+body.tb-dark .gridster-item {
+  background-color: var(--ef-panel) !important;
+  color: var(--ef-text) !important;
+  border: 1px solid var(--ef-border) !important;
+  box-shadow: none !important;
+}
+
+/* Menús y diálogos */
+body.tb-dark .mat-mdc-menu-panel,
+body.tb-dark .mat-menu-panel,
+body.tb-dark .mat-mdc-dialog-container,
+body.tb-dark .cdk-overlay-pane .mat-mdc-select-panel {
+  background-color: var(--ef-overlay) !important;
+  color: var(--ef-text) !important;
+  border: 1px solid var(--ef-border);
+}
+
+/* Inputs */
+body.tb-dark .mat-mdc-text-field-wrapper,
+body.tb-dark .mat-mdc-form-field-flex,
+body.tb-dark .mdc-text-field--filled:not(.mdc-text-field--disabled),
+body.tb-dark .mdc-text-field--outlined:not(.mdc-text-field--disabled) {
+  background-color: var(--ef-input-bg) !important;
+}
+
+body.tb-dark input,
+body.tb-dark textarea,
+body.tb-dark .mat-mdc-select-value,
+body.tb-dark .mat-mdc-form-field,
+body.tb-dark .mat-mdc-floating-label,
+body.tb-dark .mdc-floating-label {
+  color: var(--ef-text) !important;
+}
+
+/* Íconos y botones */
+body.tb-dark .mat-icon,
+body.tb-dark .material-icons,
+body.tb-dark .mat-mdc-icon-button,
+body.tb-dark .mat-mdc-button,
+body.tb-dark .mat-mdc-outlined-button,
+body.tb-dark .mat-mdc-menu-item {
+  color: var(--ef-text) !important;
+}
+
+/* Tablas */
+body.tb-dark .mat-mdc-table,
+body.tb-dark .mat-mdc-row,
+body.tb-dark .mat-mdc-cell,
+body.tb-dark table {
+  background-color: var(--ef-panel) !important;
+  color: var(--ef-text) !important;
+  border-color: var(--ef-border) !important;
+}
+
+body.tb-dark .mat-mdc-header-row,
+body.tb-dark .mat-mdc-header-cell {
+  background-color: var(--ef-panel-alt) !important;
+  color: var(--ef-text) !important;
+}
+
+/* Links */
+body.tb-dark a {
+  color: var(--ef-accent-soft) !important;
 }
 
 /***************

@@ -1,49 +1,52 @@
-import { Injectable } from '@angular/core';
-
-export type AppTheme = 'light' | 'dark';
+import { Injectable, Inject } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ThemeService {
-
   private readonly storageKey = 'tb-ui-theme';
-  private currentTheme: AppTheme = 'light';
+  private isDarkMode = false;
 
-  initTheme(): void {
-    const savedTheme = this.getSavedTheme();
-    if (savedTheme) {
-      this.setTheme(savedTheme);
-      return;
-    }
-
-    // Light por default
-    this.setTheme('light');
+  constructor(@Inject(DOCUMENT) private document: Document) {
+    this.initTheme();
   }
 
-  setTheme(theme: AppTheme): void {
-    this.currentTheme = theme;
-    localStorage.setItem(this.storageKey, theme);
-
-    const body = document.body;
-    body.classList.remove('tb-light', 'tb-dark');
-    body.classList.add(theme === 'dark' ? 'tb-dark' : 'tb-light');
+  initTheme(): void {
+    const savedTheme = localStorage.getItem(this.storageKey);
+    if (savedTheme === 'dark') {
+      this.setDark(true);
+    } else if (savedTheme === 'light') {
+      this.setDark(false);
+    } else {
+      // Por defecto oscuro o claro según el sistema
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      this.setDark(prefersDark);
+    }
   }
 
   toggleTheme(): void {
-    this.setTheme(this.currentTheme === 'dark' ? 'light' : 'dark');
+    this.setDark(!this.isDarkMode);
   }
 
   isDark(): boolean {
-    return this.currentTheme === 'dark';
+    return this.isDarkMode;
   }
 
-  getTheme(): AppTheme {
-    return this.currentTheme;
-  }
-
-  private getSavedTheme(): AppTheme | null {
-    const value = localStorage.getItem(this.storageKey);
-    return value === 'dark' || value === 'light' ? value : null;
+  private setDark(isDark: boolean): void {
+    this.isDarkMode = isDark;
+    localStorage.setItem(this.storageKey, isDark ? 'dark' : 'light');
+    
+    const html = this.document.documentElement;
+    if (isDark) {
+      html.classList.add('dark');
+      // Mantenemos tb-dark por si algún script nativo de Thingsboard lo busca
+      this.document.body.classList.add('tb-dark'); 
+      this.document.body.classList.remove('tb-light');
+    } else {
+      html.classList.remove('dark');
+      this.document.body.classList.add('tb-light');
+      this.document.body.classList.remove('tb-dark');
+    }
   }
 }

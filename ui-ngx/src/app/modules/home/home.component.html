@@ -61,17 +61,9 @@
                    placeholder="{{ 'common.enter-search' | translate }}"/>
           </mat-form-field>
         </div>
-        <tb-github-badge class="lt-md:!hidden"></tb-github-badge>
         <button [class.!hidden]="!searchEnabled"
                 mat-icon-button (click)="openSearch()">
           <mat-icon class="material-icons">search</mat-icon>
-        </button>
-        <button
-          mat-icon-button
-          class="tb-theme-toggle"
-          (click)="toggleTheme()"
-          [matTooltip]="themeService.isDark() ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'">
-          <mat-icon>{{ themeService.isDark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
         </button>
         <button *ngIf="fullscreenEnabled"
                 [class.!hidden]="displaySearchMode()"

@@ -15,11 +15,6 @@
  */
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: 'class',
-  important: ".tb-default",
-  content: [
-    "./src/**/*.{html,ts}",
-  ],
   important: ".tb-default",
   content: [
     "./src/**/*.{html,ts}",
@@ -191,4 +186,3 @@ module.exports = {
     optimizeUniversalDefaults: true
   }
 }
-

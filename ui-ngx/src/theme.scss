@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -77,28 +77,64 @@ $tb-theme: map_merge($tb-mat-theme, (_mat-system: $tb-theme-system));
 $primary: mat.m2-get-color-from-palette($tb-primary);
 $accent: mat.m2-get-color-from-palette($tb-accent);
 
+/* MODIFICACIONES MODO OSCURO (Basado en la imagen y el color #112147) */
+
 $tb-dark-mat-indigo: (
-  50: #e8eaf6,
-  100: #c5cae9,
-  200: #9fa8da,
-  300: #7986cb,
-  400: #5c6bc0,
-  500: $tb-dark-primary-color,
-  600: $tb-secondary-color,
-  700: #303f9f,
-  800: $tb-primary-color,
-  900: #1a237e,
-  A100: $tb-hue3-color,
-  A200: #536dfe,
-  A400: #3d5afe,
-  A700: #304ffe,
+  50: #e2e4e9,
+  100: #b8bdc9,
+  200: #8892a5,
+  300: #586681,
+  400: #344665,
+  500: #1b2f5c, // Color primario activo
+  600: #16264d,
+  700: #132145,
+  800: #112147, // Color solicitado (#112147) utilizado para Navbar y Tarjetas
+  900: #0a142e, // Fondo principal del dashboard (más oscuro para contraste)
+  A100: #5c85ff,
+  A200: #295fff,
+  A400: #003fff,
+  A700: #0038e6,
+  contrast: (
+    50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: white,
+    400: white,
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: rgba(black, 0.87),
+    A200: white,
+    A400: white,
+    A700: white,
+  )
+);
+
+/* Paleta de acento azul claro para coincidir con las gráficas de la imagen */
+$tb-dark-accent-palette: (
+  50: #e5f3fa,
+  100: #bee1f2,
+  200: #93ceea,
+  300: #68bae1,
+  400: #48aadb,
+  500: #289bd5, // Azul claro de los medidores/barras
+  600: #2493d0,
+  700: #1e88ca,
+  800: #187ec4,
+  900: #0f6cba,
+  A100: #d6ebff,
+  A200: #a3d2ff,
+  A400: #70b8ff,
+  A700: #57abff,
   contrast: (
     50: rgba(black, 0.87),
     100: rgba(black, 0.87),
     200: rgba(black, 0.87),
     300: rgba(black, 0.87),
-    400: rgba(black, 0.87),
-    500: map_get($tb-mat-indigo, 900),
+    400: white,
+    500: white,
     600: white,
     700: white,
     800: white,
@@ -111,18 +147,23 @@ $tb-dark-mat-indigo: (
 );
 
 $tb-dark-primary: mat.m2-define-palette($tb-dark-mat-indigo);
+$tb-dark-accent-theme: mat.m2-define-palette($tb-dark-accent-palette, 500);
 
 $tb-dark-theme: mat.m2-define-dark-theme((
   color: (
     primary: $tb-dark-primary,
-    accent: $tb-accent
+    accent: $tb-dark-accent-theme // Actualizado al azul de las gráficas
   ),
   typography: mat.m2-define-typography-config(),
   density: 0
 ));
 
 $tb-dark-theme-system: m2-utils.get-system($tb-dark-theme);
-$tb-dark-theme-system: map_merge($tb-dark-theme-system, ( surface: map_get($tb-dark-mat-indigo, 800) ));
+// Asignamos #112147 a las superficies (tarjetas/navbars) y un azul más profundo al fondo general
+$tb-dark-theme-system: map_merge($tb-dark-theme-system, ( 
+  surface: map_get($tb-dark-mat-indigo, 800),
+  background: map_get($tb-dark-mat-indigo, 900)
+));
 $tb-dark-theme: map_merge($tb-dark-theme, (_mat-system: $tb-dark-theme-system));
 
 @mixin mat-fab-toolbar-theme($theme) {

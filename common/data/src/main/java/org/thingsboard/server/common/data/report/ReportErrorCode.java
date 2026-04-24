@@ -1,0 +1,15 @@
+package org.thingsboard.server.common.data.report;
+
+public enum ReportErrorCode {
+    TEMPLATE_NOT_FOUND,
+    TEMPLATE_DISABLED,
+    INVALID_TIME_RANGE,
+    INVALID_ENTITY_SCOPE,
+    DATA_COLLECTION_FAILED,
+    PAYLOAD_BUILD_FAILED,
+    PDF_RENDER_FAILED,
+    FILE_STORAGE_FAILED,
+    FILE_NOT_FOUND,
+    ACCESS_DENIED,
+    UNKNOWN_ERROR
+}

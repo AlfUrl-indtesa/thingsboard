@@ -1,0 +1,61 @@
+<h2 mat-dialog-title>{{ template ? 'Editar plantilla' : 'Nueva plantilla' }}</h2>
+
+<div mat-dialog-content [formGroup]="form" class="dialog-content">
+  <mat-form-field appearance="outline">
+    <mat-label>Nombre</mat-label>
+    <input matInput formControlName="name">
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Descripción</mat-label>
+    <textarea matInput formControlName="description"></textarea>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Tipo</mat-label>
+    <mat-select formControlName="type">
+      <mat-option value="EXECUTIVE">EXECUTIVE</mat-option>
+      <mat-option value="OPERATIONAL">OPERATIONAL</mat-option>
+      <mat-option value="COMPRESSED_AIR">COMPRESSED_AIR</mat-option>
+      <mat-option value="CUSTOM">CUSTOM</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Estado</mat-label>
+    <mat-select formControlName="status">
+      <mat-option value="DRAFT">DRAFT</mat-option>
+      <mat-option value="ACTIVE">ACTIVE</mat-option>
+      <mat-option value="DISABLED">DISABLED</mat-option>
+      <mat-option value="ARCHIVED">ARCHIVED</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Tipo de entidad</mat-label>
+    <mat-select formControlName="entityType">
+      <mat-option value="DEVICE">DEVICE</mat-option>
+      <mat-option value="ASSET">ASSET</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Empresa</mat-label>
+    <input matInput formControlName="companyName">
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Footer</mat-label>
+    <input matInput formControlName="footerText">
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>entityIds JSON</mat-label>
+    <textarea matInput rows="8" formControlName="entityIdsJson"></textarea>
+  </mat-form-field>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="save()">Guardar</button>
+</div>

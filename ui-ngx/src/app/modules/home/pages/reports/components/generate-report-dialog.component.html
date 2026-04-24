@@ -1,0 +1,28 @@
+<h2 mat-dialog-title>Generar reporte</h2>
+
+<div mat-dialog-content [formGroup]="form" class="dialog-content">
+  <mat-form-field appearance="outline">
+    <mat-label>Inicio</mat-label>
+    <input matInput type="datetime-local" formControlName="startTs">
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Fin</mat-label>
+    <input matInput type="datetime-local" formControlName="endTs">
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Timezone</mat-label>
+    <input matInput formControlName="timezone">
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Locale</mat-label>
+    <input matInput formControlName="locale">
+  </mat-form-field>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="generate()">Generar</button>
+</div>

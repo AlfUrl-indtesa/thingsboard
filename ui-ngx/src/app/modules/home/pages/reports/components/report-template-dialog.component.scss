@@ -1,0 +1,10 @@
+.dialog-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-width: 800px;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}

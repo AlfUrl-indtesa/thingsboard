@@ -1,0 +1,35 @@
+<div class="executions-page">
+  <div class="page-header">
+    <h2>Historial de ejecuciones</h2>
+  </div>
+
+  <table mat-table [dataSource]="executions" class="mat-elevation-z2 full-width-table">
+
+    <ng-container matColumnDef="templateNameSnapshot">
+      <th mat-header-cell *matHeaderCellDef>Plantilla</th>
+      <td mat-cell *matCellDef="let execution">{{ execution.templateNameSnapshot }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="status">
+      <th mat-header-cell *matHeaderCellDef>Estado</th>
+      <td mat-cell *matCellDef="let execution">{{ execution.status }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="requestedTime">
+      <th mat-header-cell *matHeaderCellDef>Solicitado</th>
+      <td mat-cell *matCellDef="let execution">{{ execution.requestedTime | date:'medium' }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef>Acciones</th>
+      <td mat-cell *matCellDef="let execution">
+        <button mat-button color="primary" (click)="download(execution)" [disabled]="execution.status !== 'SUCCESS'">
+          Descargar
+        </button>
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+  </table>
+</div>

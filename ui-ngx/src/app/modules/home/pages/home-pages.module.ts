@@ -49,6 +49,7 @@ import { GatewaysModule } from '@home/pages/gateways/gateways.module';
 import { MobileModule } from '@home/pages/mobile/mobile.module';
 import { AiModelModule } from '@home/pages/ai-model/ai-model.module';
 import { DataExportModule } from '@app/modules/home/pages/data-export/data-export.module';
+import { ReportsModule } from '@home/pages/reports/reports.module';
 
 @NgModule({
   exports: [
@@ -85,6 +86,7 @@ import { DataExportModule } from '@app/modules/home/pages/data-export/data-expor
     ScadaSymbolModule,
     AiModelModule,
     DataExportModule,
+    ReportsModule,                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
   ]
 })
 export class HomePagesModule { }

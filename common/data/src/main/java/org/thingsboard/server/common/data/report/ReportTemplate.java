@@ -11,10 +11,11 @@ import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import java.util.List;
 import java.util.UUID;
+import org.thingsboard.server.common.data.id.ReportTemplateId;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class ReportTemplate extends BaseData<UUID> {
+public class ReportTemplate extends BaseData<ReportTemplateId> {
 
     @NotNull
     private TenantId tenantId;

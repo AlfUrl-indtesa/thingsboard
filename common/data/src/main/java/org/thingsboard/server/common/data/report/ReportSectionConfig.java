@@ -20,7 +20,6 @@ public class ReportSectionConfig {
     private String title;
 
     @NotNull
-    @Min(0)
     private Integer order;
 
     @NotNull

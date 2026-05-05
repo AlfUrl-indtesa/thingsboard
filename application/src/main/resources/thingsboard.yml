@@ -114,6 +114,16 @@ server:
 app:
   # Application version
   version: "@project.version@"
+# Reports Parameters
+report:
+  storage:
+    base-dir: /opt/thingsboard/data/reports
+
+  render:
+    base-url: http://127.0.0.1:3000
+    render-path: /render-report
+    connect-timeout-ms: 5000
+    read-timeout-ms: 120000
 
 # ZooKeeper connection parameters
 # Controls ZooKeeper-based service discovery and cluster coordination for microservice deployments.

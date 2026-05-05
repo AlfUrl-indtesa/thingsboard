@@ -9,10 +9,12 @@ import org.thingsboard.server.common.data.id.TenantId;
 
 import javax.validation.constraints.NotNull;
 import java.util.UUID;
+import org.thingsboard.server.common.data.id.ReportExecutionId;
+import org.thingsboard.server.common.data.id.ReportTemplateId;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class ReportExecution extends BaseData<UUID> {
+public class ReportExecution extends BaseData<ReportExecutionId> {
 
     @NotNull
     private TenantId tenantId;
@@ -20,7 +22,7 @@ public class ReportExecution extends BaseData<UUID> {
     private CustomerId customerId;
 
     @NotNull
-    private UUID templateId;
+    private ReportTemplateId templateId;
 
     @NotNull
     private String templateNameSnapshot;

@@ -6,7 +6,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.thingsboard.server.common.data.report.*;
 import org.thingsboard.server.dao.model.BaseSqlEntity;
-
+import org.thingsboard.server.common.data.id.ReportTemplateId;
 import jakarta.persistence.*;
 import java.util.UUID;
 
@@ -82,7 +82,7 @@ public class ReportTemplateEntity extends BaseSqlEntity<ReportTemplate> {
 
     public ReportTemplateEntity(ReportTemplate reportTemplate) {
         if (reportTemplate.getId() != null) {
-            this.setId(reportTemplate.getId());
+            this.setId(reportTemplate.getId().getId());
         }
         this.setCreatedTime(reportTemplate.getCreatedTime());
         this.tenantId = reportTemplate.getTenantId() != null ? reportTemplate.getTenantId().getId() : null;
@@ -107,7 +107,7 @@ public class ReportTemplateEntity extends BaseSqlEntity<ReportTemplate> {
     @Override
     public ReportTemplate toData() {
         ReportTemplate reportTemplate = new ReportTemplate();
-        reportTemplate.setId(this.getUuidId());
+        reportTemplate.setId(new ReportTemplateId(this.getId()));
         reportTemplate.setCreatedTime(this.getCreatedTime());
         reportTemplate.setTenantId(new org.thingsboard.server.common.data.id.TenantId(tenantId));
         if (customerId != null) {

@@ -7,7 +7,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.thingsboard.server.common.data.report.*;
 import org.thingsboard.server.dao.model.BaseSqlEntity;
-
+import org.thingsboard.server.common.data.id.ReportExecutionId;
+import org.thingsboard.server.common.data.id.ReportTemplateId;
 import jakarta.persistence.*;
 import java.util.UUID;
 
@@ -96,12 +97,12 @@ public class ReportExecutionEntity extends BaseSqlEntity<ReportExecution> {
 
     public ReportExecutionEntity(ReportExecution reportExecution) {
         if (reportExecution.getId() != null) {
-            this.setId(reportExecution.getId());
+            this.setId(reportExecution.getId().getId());
         }
         this.setCreatedTime(reportExecution.getCreatedTime());
         this.tenantId = reportExecution.getTenantId() != null ? reportExecution.getTenantId().getId() : null;
         this.customerId = reportExecution.getCustomerId() != null ? reportExecution.getCustomerId().getId() : null;
-        this.templateId = reportExecution.getTemplateId();
+        this.templateId = reportExecution.getTemplateId() != null ? reportExecution.getTemplateId().getId() : null;
         this.templateNameSnapshot = reportExecution.getTemplateNameSnapshot();
         this.reportType = reportExecution.getReportType();
         this.status = reportExecution.getStatus();
@@ -126,13 +127,13 @@ public class ReportExecutionEntity extends BaseSqlEntity<ReportExecution> {
     @Override
     public ReportExecution toData() {
         ReportExecution reportExecution = new ReportExecution();
-        reportExecution.setId(this.getUuidId());
+        reportExecution.setId(new ReportExecutionId(this.getId()));
         reportExecution.setCreatedTime(this.getCreatedTime());
         reportExecution.setTenantId(new org.thingsboard.server.common.data.id.TenantId(tenantId));
         if (customerId != null) {
             reportExecution.setCustomerId(new org.thingsboard.server.common.data.id.CustomerId(customerId));
         }
-        reportExecution.setTemplateId(templateId);
+        reportExecution.setTemplateId(new ReportTemplateId(templateId));
         reportExecution.setTemplateNameSnapshot(templateNameSnapshot);
         reportExecution.setReportType(reportType);
         reportExecution.setStatus(status);

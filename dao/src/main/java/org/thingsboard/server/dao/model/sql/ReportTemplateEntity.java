@@ -2,11 +2,12 @@ package org.thingsboard.server.dao.model.sql;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import org.hibernate.annotations.Type;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.thingsboard.server.common.data.report.*;
 import org.thingsboard.server.dao.model.BaseSqlEntity;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.util.UUID;
 
 @Data
@@ -39,23 +40,23 @@ public class ReportTemplateEntity extends BaseSqlEntity<ReportTemplate> {
     @Column(name = "scope_type", nullable = false, length = 50)
     private ReportScopeType scopeType;
 
-    @Type(type = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "entity_filter", columnDefinition = "jsonb", nullable = false)
     private ReportEntityFilter entityFilter;
 
-    @Type(type = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "sections", columnDefinition = "jsonb", nullable = false)
     private java.util.List<ReportSectionConfig> sections;
 
-    @Type(type = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "branding", columnDefinition = "jsonb")
     private ReportBrandingConfig branding;
 
-    @Type(type = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "default_time_range", columnDefinition = "jsonb")
     private ReportTimeRangeConfig defaultTimeRange;
 
-    @Type(type = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "generation_options", columnDefinition = "jsonb")
     private ReportGenerationOptions generationOptions;
 

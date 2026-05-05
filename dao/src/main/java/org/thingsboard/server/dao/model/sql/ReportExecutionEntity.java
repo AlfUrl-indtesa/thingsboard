@@ -3,11 +3,12 @@ package org.thingsboard.server.dao.model.sql;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import org.hibernate.annotations.Type;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.thingsboard.server.common.data.report.*;
 import org.thingsboard.server.dao.model.BaseSqlEntity;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.util.UUID;
 
 @Data
@@ -48,11 +49,11 @@ public class ReportExecutionEntity extends BaseSqlEntity<ReportExecution> {
     @Column(name = "finished_time")
     private Long finishedTime;
 
-    @Type(type = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "execution_request", columnDefinition = "jsonb")
     private JsonNode executionRequest;
 
-    @Type(type = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload_snapshot", columnDefinition = "jsonb")
     private JsonNode payloadSnapshot;
 
@@ -85,7 +86,7 @@ public class ReportExecutionEntity extends BaseSqlEntity<ReportExecution> {
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
 
-    @Type(type = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "execution_metadata", columnDefinition = "jsonb")
     private JsonNode executionMetadata;
 

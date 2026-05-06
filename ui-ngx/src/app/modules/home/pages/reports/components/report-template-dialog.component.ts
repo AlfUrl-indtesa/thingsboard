@@ -6,6 +6,7 @@ import { ReportTemplate } from '../models/report.models';
 
 @Component({
   selector: 'tb-report-template-dialog',
+  standalone: false,
   templateUrl: './report-template-dialog.component.html',
   styleUrls: ['./report-template-dialog.component.scss']
 })

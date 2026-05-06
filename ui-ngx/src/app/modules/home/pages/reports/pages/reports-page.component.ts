@@ -8,6 +8,7 @@ import { GenerateReportDialogComponent } from '../components/generate-report-dia
 
 @Component({
   selector: 'tb-reports-page',
+  standalone: false,
   templateUrl: './reports-page.component.html',
   styleUrls: ['./reports-page.component.scss']
 })

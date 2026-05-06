@@ -5,6 +5,7 @@ import { ReportService } from "../services/report.service";
 
 @Component({
     selector: "tb-report-executions-page",
+    standalone: false,
     templateUrl: "./report-executions-page.component.html",
     styleUrls: ["./report-executions-page.component.scss"],
 })

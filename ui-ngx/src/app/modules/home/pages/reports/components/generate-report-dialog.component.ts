@@ -6,6 +6,7 @@ import { ReportService } from '../services/report.service';
 
 @Component({
   selector: 'tb-generate-report-dialog',
+  standalone: false,
   templateUrl: './generate-report-dialog.component.html',
   styleUrls: ['./generate-report-dialog.component.scss']
 })

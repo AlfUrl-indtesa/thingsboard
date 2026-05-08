@@ -26,7 +26,7 @@ import org.thingsboard.server.dao.util.TbAutoConfiguration;
 @Configuration
 @TbAutoConfiguration
 @ComponentScan({"org.thingsboard.server.dao.sqlts.sql"})
-@EnableJpaRepositories(value = {"org.thingsboard.server.dao.sqlts.insert.latest.sql", "org.thingsboard.server.dao.sqlts.latest","org.thingsboard.server.dao.report"}, bootstrapMode = BootstrapMode.LAZY)
+@EnableJpaRepositories(value = {"org.thingsboard.server.dao.sqlts.insert.latest.sql", "org.thingsboard.server.dao.sqlts.latest"}, bootstrapMode = BootstrapMode.LAZY)
 @EnableTransactionManagement
 @SqlTsLatestDao
 public class SqlTsLatestDaoConfig {

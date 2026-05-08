@@ -41,7 +41,7 @@ import java.util.Objects;
 
 @DedicatedEventsDataSource
 @Configuration
-@EnableJpaRepositories(value = {"org.thingsboard.server.dao.sql.event", "org.thingsboard.server.dao.sql.audit"},
+@EnableJpaRepositories(value = {"org.thingsboard.server.dao.sql.event", "org.thingsboard.server.dao.sql.audit","org.thingsboard.server.dao.report"},
         bootstrapMode = BootstrapMode.LAZY,
         entityManagerFactoryRef = "eventsEntityManagerFactory", transactionManagerRef = "eventsTransactionManager")
 public class DedicatedEventsJpaDaoConfig {

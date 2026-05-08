@@ -68,6 +68,6 @@ public class ReportTemplateController extends BaseController {
         UUID templateId = UUID.fromString(strTemplateId);
 
         var execution = reportExecutionService.generate(tenantId, userId, templateId, request);
-        return new GenerateReportResponse(execution.getId(), execution.getStatus());
+        return new GenerateReportResponse(execution.getId().getId(), execution.getStatus());
     }
 }

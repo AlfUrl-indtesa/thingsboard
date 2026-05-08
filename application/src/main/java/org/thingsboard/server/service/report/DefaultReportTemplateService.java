@@ -34,7 +34,7 @@ public class DefaultReportTemplateService implements ReportTemplateService {
                 reportTemplate.setStatus(ReportTemplateStatus.DRAFT);
             }
         } else {
-            ReportTemplate existing = findById(tenantId, reportTemplate.getId());
+            ReportTemplate existing = findById(tenantId, reportTemplate.getId().getId());
             reportTemplate.setCreatedTime(existing.getCreatedTime());
             reportTemplate.setCreatedBy(existing.getCreatedBy());
         }

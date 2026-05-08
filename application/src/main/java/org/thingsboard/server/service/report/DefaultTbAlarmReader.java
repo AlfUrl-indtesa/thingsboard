@@ -15,7 +15,7 @@ import org.thingsboard.server.common.data.report.ReportAlarmQuery;
 import org.thingsboard.server.common.data.report.ReportErrorCode;
 import org.thingsboard.server.common.data.report.ReportTargetEntity;
 import org.thingsboard.server.dao.alarm.AlarmService;
-
+import org.thingsboard.server.common.data.page.SortOrder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -26,31 +26,33 @@ public class DefaultTbAlarmReader implements TbAlarmReader {
 
     private static final int DEFAULT_LIMIT = 100;
     private static final String DEFAULT_SORT_PROPERTY = "createdTime";
-    private static final String DEFAULT_SORT_ORDER = "DESC";
+    
 
     private final AlarmService alarmService;
     private final ReportEntityIdFactory reportEntityIdFactory;
 
     @Override
     public List<ReportAlarmItem> readAlarms(TenantId tenantId,
-                                            ReportTargetEntity entity,
-                                            Long startTs,
-                                            Long endTs,
-                                            ReportAlarmQuery query) {
+            ReportTargetEntity entity,
+            Long startTs,
+            Long endTs,
+            ReportAlarmQuery query) {
         validate(tenantId, entity, startTs, endTs);
 
         EntityId entityId = reportEntityIdFactory.toEntityId(entity);
         ReportAlarmQuery effectiveQuery = query != null ? query : new ReportAlarmQuery();
 
+        SortOrder sortOrder = new SortOrder(
+                DEFAULT_SORT_PROPERTY,
+                resolveSortDirection(effectiveQuery.getOrderBy()));
+
         TimePageLink pageLink = new TimePageLink(
                 resolveLimit(effectiveQuery.getLimit()),
                 0,
                 null,
-                DEFAULT_SORT_PROPERTY,
-                normalizeSortOrder(effectiveQuery.getOrderBy()),
+                sortOrder,
                 startTs,
-                endTs
-        );
+                endTs);
 
         AlarmQueryV2 alarmQuery = new AlarmQueryV2(
                 entityId,
@@ -58,8 +60,7 @@ public class DefaultTbAlarmReader implements TbAlarmReader {
                 Collections.emptyList(),
                 buildSearchStatuses(effectiveQuery.getIncludeCleared()),
                 buildSeverities(effectiveQuery.getSeverity()),
-                null
-        );
+                null);
 
         try {
             PageData<AlarmInfo> pageData = alarmService.findAlarmsV2(tenantId, alarmQuery);
@@ -68,34 +69,30 @@ public class DefaultTbAlarmReader implements TbAlarmReader {
             throw new ReportServiceException(
                     ReportErrorCode.DATA_COLLECTION_FAILED,
                     "Failed to read alarms for entity: " + entity.getEntityId(),
-                    e
-            );
+                    e);
         }
     }
 
     private void validate(TenantId tenantId,
-                          ReportTargetEntity entity,
-                          Long startTs,
-                          Long endTs) {
+            ReportTargetEntity entity,
+            Long startTs,
+            Long endTs) {
         if (tenantId == null) {
             throw new ReportServiceException(
                     ReportErrorCode.DATA_COLLECTION_FAILED,
-                    "TenantId is required for alarm query"
-            );
+                    "TenantId is required for alarm query");
         }
 
         if (entity == null || entity.getEntityId() == null || entity.getEntityType() == null) {
             throw new ReportServiceException(
                     ReportErrorCode.INVALID_ENTITY_SCOPE,
-                    "Valid target entity is required for alarm query"
-            );
+                    "Valid target entity is required for alarm query");
         }
 
         if (startTs == null || endTs == null || startTs >= endTs) {
             throw new ReportServiceException(
                     ReportErrorCode.INVALID_TIME_RANGE,
-                    "Invalid alarm time range"
-            );
+                    "Invalid alarm time range");
         }
     }
 
@@ -103,12 +100,13 @@ public class DefaultTbAlarmReader implements TbAlarmReader {
         return (limit != null && limit > 0) ? limit : DEFAULT_LIMIT;
     }
 
-    private String normalizeSortOrder(String orderBy) {
+    private SortOrder.Direction resolveSortDirection(String orderBy) {
         if (orderBy == null || orderBy.isBlank()) {
-            return DEFAULT_SORT_ORDER;
+            return SortOrder.Direction.DESC;
         }
+
         String normalized = orderBy.trim().toUpperCase();
-        return ("ASC".equals(normalized) || "DESC".equals(normalized)) ? normalized : DEFAULT_SORT_ORDER;
+        return "ASC".equals(normalized) ? SortOrder.Direction.ASC : SortOrder.Direction.DESC;
     }
 
     private List<AlarmSearchStatus> buildSearchStatuses(Boolean includeCleared) {
@@ -127,8 +125,7 @@ public class DefaultTbAlarmReader implements TbAlarmReader {
         } catch (IllegalArgumentException e) {
             throw new ReportServiceException(
                     ReportErrorCode.DATA_COLLECTION_FAILED,
-                    "Invalid alarm severity: " + severity
-            );
+                    "Invalid alarm severity: " + severity);
         }
     }
 

@@ -11,7 +11,7 @@ import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.service.report.ReportExecutionService;
 import org.thingsboard.server.service.report.ReportTemplateService;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.UUID;
 
 @RestController

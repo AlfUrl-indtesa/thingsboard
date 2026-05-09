@@ -5,11 +5,11 @@ import { ReportExecutionsPageComponent } from './pages/report-executions-page.co
 
 const routes: Routes = [
   {
-    path: '',
+    path: 'reports',
     component: ReportsPageComponent
   },
   {
-    path: 'executions',
+    path: 'reports/executions',
     component: ReportExecutionsPageComponent
   }
 ];

@@ -6,7 +6,7 @@ import { DataExportComponent } from './data-export.component';
 
 const routes: Routes = [
   {
-    path: 'data_export',
+    path: 'data-export',
     component: DataExportComponent,
     data: {
       auth: [Authority.TENANT_ADMIN, Authority.CUSTOMER_USER],

@@ -1,61 +1,69 @@
-<h2 mat-dialog-title>{{ template ? 'Editar plantilla' : 'Nueva plantilla' }}</h2>
+<h2 mat-dialog-title>
+  {{ template ? ('reports.edit_template' | translate) : ('reports.new_template' | translate) }}
+</h2>
 
 <div mat-dialog-content [formGroup]="form" class="dialog-content">
+
   <mat-form-field appearance="outline">
-    <mat-label>Nombre</mat-label>
+    <mat-label>{{ 'reports.name' | translate }}</mat-label>
     <input matInput formControlName="name">
   </mat-form-field>
 
   <mat-form-field appearance="outline">
-    <mat-label>Descripción</mat-label>
+    <mat-label>{{ 'reports.description' | translate }}</mat-label>
     <textarea matInput formControlName="description"></textarea>
   </mat-form-field>
 
   <mat-form-field appearance="outline">
-    <mat-label>Tipo</mat-label>
+    <mat-label>{{ 'reports.type' | translate }}</mat-label>
     <mat-select formControlName="type">
-      <mat-option value="EXECUTIVE">EXECUTIVE</mat-option>
-      <mat-option value="OPERATIONAL">OPERATIONAL</mat-option>
-      <mat-option value="COMPRESSED_AIR">COMPRESSED_AIR</mat-option>
-      <mat-option value="CUSTOM">CUSTOM</mat-option>
+      <mat-option value="EXECUTIVE">{{ 'reports.type_executive' | translate }}</mat-option>
+      <mat-option value="OPERATIONAL">{{ 'reports.type_operational' | translate }}</mat-option>
+      <mat-option value="COMPRESSED_AIR">{{ 'reports.type_compressed_air' | translate }}</mat-option>
+      <mat-option value="CUSTOM">{{ 'reports.type_custom' | translate }}</mat-option>
     </mat-select>
   </mat-form-field>
 
   <mat-form-field appearance="outline">
-    <mat-label>Estado</mat-label>
+    <mat-label>{{ 'reports.status' | translate }}</mat-label>
     <mat-select formControlName="status">
-      <mat-option value="DRAFT">DRAFT</mat-option>
-      <mat-option value="ACTIVE">ACTIVE</mat-option>
-      <mat-option value="DISABLED">DISABLED</mat-option>
-      <mat-option value="ARCHIVED">ARCHIVED</mat-option>
+      <mat-option value="DRAFT">{{ 'reports.status_draft' | translate }}</mat-option>
+      <mat-option value="ACTIVE">{{ 'reports.status_active' | translate }}</mat-option>
+      <mat-option value="DISABLED">{{ 'reports.status_disabled' | translate }}</mat-option>
+      <mat-option value="ARCHIVED">{{ 'reports.status_archived' | translate }}</mat-option>
     </mat-select>
   </mat-form-field>
 
   <mat-form-field appearance="outline">
-    <mat-label>Tipo de entidad</mat-label>
+    <mat-label>{{ 'reports.entity_type' | translate }}</mat-label>
     <mat-select formControlName="entityType">
-      <mat-option value="DEVICE">DEVICE</mat-option>
-      <mat-option value="ASSET">ASSET</mat-option>
+      <mat-option value="DEVICE">{{ 'entity.type-device' | translate }}</mat-option>
+      <mat-option value="ASSET">{{ 'entity.type-asset' | translate }}</mat-option>
     </mat-select>
   </mat-form-field>
 
   <mat-form-field appearance="outline">
-    <mat-label>Empresa</mat-label>
+    <mat-label>{{ 'reports.company_name' | translate }}</mat-label>
     <input matInput formControlName="companyName">
   </mat-form-field>
 
   <mat-form-field appearance="outline">
-    <mat-label>Footer</mat-label>
+    <mat-label>{{ 'reports.footer' | translate }}</mat-label>
     <input matInput formControlName="footerText">
   </mat-form-field>
 
   <mat-form-field appearance="outline" class="full-width">
-    <mat-label>entityIds JSON</mat-label>
+    <mat-label>{{ 'reports.entity_ids_json' | translate }}</mat-label>
     <textarea matInput rows="8" formControlName="entityIdsJson"></textarea>
   </mat-form-field>
+
 </div>
 
 <div mat-dialog-actions align="end">
-  <button mat-button (click)="close()">Cancelar</button>
-  <button mat-raised-button color="primary" (click)="save()">Guardar</button>
+  <button mat-button (click)="close()">
+    {{ 'action.cancel' | translate }}
+  </button>
+  <button mat-raised-button color="primary" (click)="save()">
+    {{ 'action.save' | translate }}
+  </button>
 </div>

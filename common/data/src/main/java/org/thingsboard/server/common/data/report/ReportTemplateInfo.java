@@ -9,3 +9,4 @@ public class ReportTemplateInfo extends ReportTemplate {
 
     private Integer sectionCount;
 }
+

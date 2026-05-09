@@ -12,3 +12,4 @@ public enum ReportSectionType {
     IMAGE_BLOCK,
     TWO_COLUMN
 }
+

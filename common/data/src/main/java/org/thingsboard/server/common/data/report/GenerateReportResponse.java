@@ -12,3 +12,4 @@ public class GenerateReportResponse {
     private UUID executionId;
     private ReportExecutionStatus status;
 }
+

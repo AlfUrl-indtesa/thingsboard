@@ -9,3 +9,4 @@ public class ReportTableColumn {
     private String label;
     private String align;
 }
+

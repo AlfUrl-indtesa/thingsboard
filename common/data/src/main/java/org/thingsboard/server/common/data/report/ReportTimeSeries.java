@@ -24,3 +24,4 @@ public class ReportTimeSeries {
 
     private List<ReportMetricPoint> points = new ArrayList<>();
 }
+

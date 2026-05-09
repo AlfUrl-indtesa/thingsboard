@@ -21,3 +21,4 @@ public class ReportGenerationOptions {
 
     private String fileNamePattern;
 }
+

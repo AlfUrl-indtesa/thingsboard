@@ -8,3 +8,4 @@ public enum ReportAggregationType {
     SUM,
     COUNT
 }
+

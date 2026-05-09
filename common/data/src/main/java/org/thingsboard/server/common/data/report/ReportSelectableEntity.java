@@ -28,3 +28,4 @@ public class ReportSelectableEntity {
         this.customerId = customerId;
     }
 }
+

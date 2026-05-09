@@ -12,3 +12,4 @@ public class ReportMetricPoint {
     private Long ts;
     private Double value;
 }
+

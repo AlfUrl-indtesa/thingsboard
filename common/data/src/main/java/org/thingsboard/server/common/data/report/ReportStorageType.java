@@ -5,3 +5,4 @@ public enum ReportStorageType {
     TB_FILE,
     EXTERNAL_STORAGE
 }
+

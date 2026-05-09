@@ -27,3 +27,4 @@ public enum ReportScopeType {
      */
     CURRENT_CUSTOMER_ENTITIES
 }
+

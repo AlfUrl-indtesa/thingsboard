@@ -6,3 +6,4 @@ public enum ReportType {
     COMPRESSED_AIR,
     CUSTOM
 }
+

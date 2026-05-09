@@ -4,3 +4,4 @@ public enum ReportTimeRangeMode {
     RELATIVE,
     ABSOLUTE
 }
+

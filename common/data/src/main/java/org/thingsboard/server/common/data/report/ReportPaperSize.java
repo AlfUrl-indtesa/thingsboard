@@ -4,3 +4,4 @@ public enum ReportPaperSize {
     A4,
     LETTER
 }
+

@@ -2,13 +2,9 @@ package org.thingsboard.server.common.data.report;
 
 import lombok.Data;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.NotNull;
 
 @Data
 public class ReportChartQuery {
-
-    @NotBlank
     private String key;
 
     private String label;
@@ -19,14 +15,12 @@ public class ReportChartQuery {
      * Whether to merge all selected entities into a single logical chart group.
      * The actual rendering layer may decide how to display the returned series.
      */
-    @NotNull
     private Boolean combineEntities = Boolean.FALSE;
 
     /**
      * Telemetry aggregation to use at query time.
      * Example: NONE, AVG, MIN, MAX, SUM, COUNT
      */
-    @NotNull
     private ReportAggregationType aggregation = ReportAggregationType.NONE;
 
     /**
@@ -44,3 +38,4 @@ public class ReportChartQuery {
      */
     private String orderBy = "ASC";
 }
+

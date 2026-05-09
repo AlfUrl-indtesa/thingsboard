@@ -26,3 +26,4 @@ public class ReportAlarmQuery {
      */
     private String orderBy = "DESC";
 }
+

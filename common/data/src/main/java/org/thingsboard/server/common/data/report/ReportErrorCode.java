@@ -13,3 +13,4 @@ public enum ReportErrorCode {
     ACCESS_DENIED,
     UNKNOWN_ERROR
 }
+

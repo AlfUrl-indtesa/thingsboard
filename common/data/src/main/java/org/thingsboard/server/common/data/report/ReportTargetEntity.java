@@ -12,3 +12,4 @@ public class ReportTargetEntity {
     private String name;
     private String label;
 }
+

@@ -15,3 +15,4 @@ public class ReportDataResult {
     private List<ReportAlarmItem> alarms = new ArrayList<>();
     private List<String> observations = new ArrayList<>();
 }
+

@@ -9,3 +9,4 @@ public class ReportExecutionInfo extends ReportExecution {
 
     private String requestedByName;
 }
+

@@ -11,3 +11,4 @@ public class ReportAlarmItem {
     private String name;
     private String description;
 }
+

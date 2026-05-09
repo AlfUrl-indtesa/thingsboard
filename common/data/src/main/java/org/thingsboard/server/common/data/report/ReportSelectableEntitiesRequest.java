@@ -22,3 +22,4 @@ public class ReportSelectableEntitiesRequest {
 
     private int pageSize = 50;
 }
+

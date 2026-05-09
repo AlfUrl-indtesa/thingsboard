@@ -14,3 +14,4 @@ public class ReportTable {
     private List<ReportTableColumn> columns = new ArrayList<>();
     private List<Map<String, Object>> rows = new ArrayList<>();
 }
+

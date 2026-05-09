@@ -16,47 +16,21 @@ import org.thingsboard.server.common.data.id.ReportTemplateId;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class ReportTemplate extends BaseData<ReportTemplateId> {
-
-    @NotNull
     private TenantId tenantId;
 
     private CustomerId customerId;
-
-    @NotBlank
     private String name;
 
     private String description;
-
-    @NotNull
     private ReportType type;
-
-    @NotNull
     private ReportTemplateStatus status = ReportTemplateStatus.DRAFT;
-
-    @NotNull
     private ReportScopeType scopeType;
-
-    @Valid
-    @NotNull
     private ReportEntityFilter entityFilter;
-
-    @Valid
-    @NotNull
     private List<ReportSectionConfig> sections;
-
-    @Valid
     private ReportBrandingConfig branding;
-
-    @Valid
     private ReportTimeRangeConfig defaultTimeRange;
-
-    @Valid
     private ReportGenerationOptions generationOptions;
-
-    @NotNull
     private ReportOutputFormat outputFormat = ReportOutputFormat.PDF;
-
-    @NotNull
     private Boolean system = Boolean.FALSE;
 
     private UUID createdBy;
@@ -65,3 +39,4 @@ public class ReportTemplate extends BaseData<ReportTemplateId> {
 
     private UUID updatedBy;
 }
+

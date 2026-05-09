@@ -12,3 +12,4 @@ public class ReportKpi {
     private String unit;
     private String status;
 }
+

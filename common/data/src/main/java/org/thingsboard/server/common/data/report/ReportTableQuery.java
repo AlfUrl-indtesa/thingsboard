@@ -2,21 +2,13 @@ package org.thingsboard.server.common.data.report;
 
 import lombok.Data;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.NotNull;
 
 @Data
 public class ReportTableQuery {
-
-    @NotBlank
     private String key;
-
-    @NotBlank
     private String label;
 
     private String unit;
-
-    @NotNull
     private ReportKpiAggregationType aggregation;
 
     /**
@@ -29,3 +21,4 @@ public class ReportTableQuery {
      */
     private String align = "right";
 }
+

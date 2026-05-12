@@ -38,11 +38,11 @@ public class DefaultReportEntitySelectionService implements ReportEntitySelectio
 
     @Override
     public PageData<ReportSelectableEntity> findSelectableEntities(SecurityUser user,
-                                                                   EntityType entityType,
-                                                                   CustomerId customerId,
-                                                                   String textSearch,
-                                                                   int page,
-                                                                   int pageSize) {
+            EntityType entityType,
+            CustomerId customerId,
+            String textSearch,
+            int page,
+            int pageSize) {
         TenantId tenantId = user.getTenantId();
         PageLink pageLink = new PageLink(pageSize, page, textSearch);
 
@@ -58,9 +58,9 @@ public class DefaultReportEntitySelectionService implements ReportEntitySelectio
     }
 
     private PageData<ReportSelectableEntity> findDevices(SecurityUser user,
-                                                         TenantId tenantId,
-                                                         CustomerId requestedCustomerId,
-                                                         PageLink pageLink) {
+            TenantId tenantId,
+            CustomerId requestedCustomerId,
+            PageLink pageLink) {
         PageData<Device> devices;
 
         switch (user.getAuthority()) {
@@ -86,14 +86,13 @@ public class DefaultReportEntitySelectionService implements ReportEntitySelectio
                 device.getName(),
                 device.getLabel(),
                 device.getType(),
-                device.getCustomerId()
-        ));
+                device.getCustomerId()));
     }
 
     private PageData<ReportSelectableEntity> findAssets(SecurityUser user,
-                                                        TenantId tenantId,
-                                                        CustomerId requestedCustomerId,
-                                                        PageLink pageLink) {
+            TenantId tenantId,
+            CustomerId requestedCustomerId,
+            PageLink pageLink) {
         PageData<Asset> assets;
 
         switch (user.getAuthority()) {
@@ -119,8 +118,7 @@ public class DefaultReportEntitySelectionService implements ReportEntitySelectio
                 asset.getName(),
                 asset.getLabel(),
                 asset.getType(),
-                asset.getCustomerId()
-        ));
+                asset.getCustomerId()));
     }
 
     @Override
@@ -129,16 +127,14 @@ public class DefaultReportEntitySelectionService implements ReportEntitySelectio
             return Collections.emptyList();
         }
 
-        // Primero dejamos la seguridad de acceso para el siguiente bloque,
-        // porque depende de cómo estén disponibles los checkers en tu versión.
-        return timeseriesService.findAllLatest(tenantId(user), entityId).stream()
-                .map(tsKvEntry -> tsKvEntry.getKey())
-                .distinct()
-                .sorted()
-                .collect(Collectors.toList());
-    }
-
-    private TenantId tenantId(SecurityUser user) {
-        return user.getTenantId();
+        try {
+            return timeseriesService.findAllLatest(tenantId(user), entityId).get().stream()
+                    .map(tsKvEntry -> tsKvEntry.getKey())
+                    .distinct()
+                    .sorted()
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load selectable telemetry keys for entity: " + entityId, e);
+        }
     }
 }

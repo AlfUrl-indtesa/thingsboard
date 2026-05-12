@@ -38,7 +38,6 @@ public class DefaultReportValidationService implements ReportValidationService {
         validateEntityFilter(reportTemplate.getEntityFilter());
         validateSections(reportTemplate);
         validateTimeRangeConfig(reportTemplate.getDefaultTimeRange());
-        validateEntityFilterAccess(currentUser, template.getEntityFilter());
     }
 
     @Override
@@ -84,20 +83,6 @@ public class DefaultReportValidationService implements ReportValidationService {
                     throw new ReportServiceException(
                             ReportErrorCode.INVALID_ENTITY_SCOPE,
                             "Fixed entity scope requires entityIds");
-                }
-                break;
-            case ENTITY_GROUP:
-                if (entityFilter.getEntityGroupId() == null) {
-                    throw new ReportServiceException(
-                            ReportErrorCode.INVALID_ENTITY_SCOPE,
-                            "Entity group scope requires entityGroupId");
-                }
-                break;
-            case DYNAMIC_FILTER:
-                if (entityFilter.getCriteria() == null || entityFilter.getCriteria().isNull()) {
-                    throw new ReportServiceException(
-                            ReportErrorCode.INVALID_ENTITY_SCOPE,
-                            "Dynamic filter scope requires criteria");
                 }
                 break;
             default:

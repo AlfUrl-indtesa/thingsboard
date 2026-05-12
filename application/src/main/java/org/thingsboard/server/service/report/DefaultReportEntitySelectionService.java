@@ -128,7 +128,7 @@ public class DefaultReportEntitySelectionService implements ReportEntitySelectio
         }
 
         try {
-            return timeseriesService.findAllLatest(tenantId(user), entityId).get().stream()
+            return timeseriesService.findAllLatest(user.getTenantId(), entityId).get().stream()
                     .map(tsKvEntry -> tsKvEntry.getKey())
                     .distinct()
                     .sorted()

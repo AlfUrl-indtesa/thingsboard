@@ -1,5 +1,5 @@
 <h2 mat-dialog-title>
-  {{ template ? ('reports.edit_template' | translate) : ('reports.new_template' | translate) }}
+  {{ data?.template ? ('reports.edit_report' | translate) : ('reports.new_report' | translate) }}
 </h2>
 
 <div mat-dialog-content [formGroup]="form" class="dialog-content">

@@ -1,52 +1,185 @@
-import { Component, Inject, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { ReportService } from '../services/report.service';
-import { ReportTemplate } from '../models/report.models';
+///
+/// Copyright © 2016-2026 The Thingsboard Authors
+///
+/// Licensed under the Apache License, Version 2.0
+///
+
+import { Component, Inject, OnInit } from "@angular/core";
+import { FormBuilder, FormControl, Validators } from "@angular/forms";
+import { MAT_DIALOG_DATA, MatDialogRef } from "@angular/material/dialog";
+import {
+  ReportSelectableEntity,
+  ReportTemplate,
+} from "../models/report.models";
+import { ReportService } from "../services/report.service";
+type ReportEntityType = "DEVICE" | "ASSET";
 
 @Component({
-  selector: 'tb-report-template-dialog',
+  selector: "tb-report-template-dialog",
   standalone: false,
-  templateUrl: './report-template-dialog.component.html',
-  styleUrls: ['./report-template-dialog.component.scss']
+  templateUrl: "./report-template-dialog.component.html",
+  styleUrls: ["./report-template-dialog.component.scss"],
 })
 export class ReportTemplateDialogComponent implements OnInit {
+  entities: ReportSelectableEntity[] = [];
+  telemetryKeys: string[] = [];
+  loadingEntities = false;
+  loadingKeys = false;
 
-  form: FormGroup;
+  form = this.fb.group({
+    name: new FormControl<string>("", {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+    description: new FormControl<string>("", {
+      nonNullable: true,
+    }),
+    type: new FormControl<string>("TECHNICAL_VARIABLE", {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+    status: new FormControl<string>("ACTIVE", {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+
+    scopeType: new FormControl<string>("FIXED_ENTITIES", {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+    entityType: new FormControl<ReportEntityType>("DEVICE", {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+    selectedEntityIds: new FormControl<any[]>([], {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+    selectedKeys: new FormControl<string[]>([], {
+      nonNullable: true,
+    }),
+
+    companyName: new FormControl<string>("Eficentra", {
+      nonNullable: true,
+    }),
+    footerText: new FormControl<string>("Reporte generado por Eficentra", {
+      nonNullable: true,
+    }),
+
+    includeExecutiveSummary: [true],
+    includeDataQuality: [true],
+    includeGeneralStatistics: [true],
+    includeTimeSeriesChart: [true],
+    includeDailyPerformance: [true],
+    includeDailyCharts: [true],
+    includeAlarms: [true],
+    includeConclusion: [true],
+  });
 
   constructor(
     private fb: FormBuilder,
     private reportService: ReportService,
     private dialogRef: MatDialogRef<ReportTemplateDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public template: ReportTemplate | null
+    @Inject(MAT_DIALOG_DATA) public data: { template?: ReportTemplate },
   ) {
-    this.form = this.fb.group({
-      name: ['', Validators.required],
-      description: [''],
-      type: ['COMPRESSED_AIR', Validators.required],
-      status: ['ACTIVE', Validators.required],
-      scopeType: ['FIXED_ENTITIES', Validators.required],
-      entityType: ['DEVICE'],
-      entityIdsJson: ['[]', Validators.required],
-      companyName: ['Eficentra'],
-      footerText: ['Reporte generado por Eficentra']
-    });
   }
 
   ngOnInit(): void {
-    if (this.template) {
+    this.loadEntities();
+
+    this.form.get("entityType")?.valueChanges.subscribe(() => {
       this.form.patchValue({
-        name: this.template.name,
-        description: this.template.description,
-        type: this.template.type,
-        status: this.template.status,
-        scopeType: this.template.scopeType,
-        entityType: this.template.entityFilter?.entityType || 'DEVICE',
-        entityIdsJson: JSON.stringify(this.template.entityFilter?.entityIds || [], null, 2),
-        companyName: this.template.branding?.companyName || '',
-        footerText: this.template.branding?.footerText || ''
+        selectedEntityIds: [],
+        selectedKeys: [],
       });
+      this.telemetryKeys = [];
+      this.loadEntities();
+    });
+
+    this.form.get("selectedEntityIds")?.valueChanges.subscribe(
+      (entityIds: any[]) => {
+        this.onSelectedEntitiesChanged(entityIds || []);
+      },
+    );
+
+    if (this.data?.template) {
+      this.patchTemplate(this.data.template);
     }
+  }
+
+  private normalizeEntityType(
+    entityType: string | null | undefined,
+  ): ReportEntityType {
+    return entityType === "ASSET" ? "ASSET" : "DEVICE";
+  }
+
+  private patchTemplate(template: ReportTemplate): void {
+    const entityIds = template.entityFilter?.entityIds || [];
+    const entityType = this.normalizeEntityType(
+      template.entityFilter?.entityType,
+    );
+
+    this.form.patchValue({
+      name: template.name || "",
+      description: template.description || "",
+      type: template.type || "TECHNICAL_VARIABLE",
+      status: template.status || "ACTIVE",
+      scopeType: template.entityFilter?.scopeType || "FIXED_ENTITIES",
+      entityType,
+      selectedEntityIds: entityIds,
+      selectedKeys: this.extractKeysFromSections(template.sections || []),
+      companyName: template.branding?.companyName || "Eficentra",
+      footerText: template.branding?.footerText ||
+        "Reporte generado por Eficentra",
+    });
+  }
+
+  loadEntities(textSearch = ""): void {
+    const entityType = this.form.getRawValue().entityType;
+    this.loadingEntities = true;
+
+    this.reportService.getSelectableEntities(entityType, 0, 100, textSearch)
+      .subscribe({
+        next: (pageData) => {
+          this.entities = pageData?.data || [];
+          this.loadingEntities = false;
+        },
+        error: () => {
+          this.entities = [];
+          this.loadingEntities = false;
+        },
+      });
+  }
+
+  private onSelectedEntitiesChanged(entityIds: any[]): void {
+    if (!entityIds.length) {
+      this.telemetryKeys = [];
+      this.form.patchValue({ selectedKeys: [] }, { emitEvent: false });
+      return;
+    }
+
+    const firstEntity = entityIds[0];
+
+    if (!firstEntity?.entityType || !firstEntity?.id) {
+      this.telemetryKeys = [];
+      return;
+    }
+
+    this.loadingKeys = true;
+
+    this.reportService.getSelectableEntityKeys(
+      firstEntity.entityType,
+      firstEntity.id,
+    ).subscribe({
+      next: (keys) => {
+        this.telemetryKeys = keys || [];
+        this.loadingKeys = false;
+      },
+      error: () => {
+        this.telemetryKeys = [];
+        this.loadingKeys = false;
+      },
+    });
   }
 
   save(): void {
@@ -55,53 +188,29 @@ export class ReportTemplateDialogComponent implements OnInit {
       return;
     }
 
-    let entityIds: any[] = [];
-    try {
-      entityIds = JSON.parse(this.form.value.entityIdsJson || '[]');
-    } catch {
-      alert('El JSON de entityIds no es válido');
-      return;
-    }
+    const raw = this.form.getRawValue();
+    const selectedEntityIds = raw.selectedEntityIds || [];
+    const selectedKeys = raw.selectedKeys || [];
 
     const template: ReportTemplate = {
-      ...this.template,
-      name: this.form.value.name,
-      description: this.form.value.description,
-      type: this.form.value.type,
-      status: this.form.value.status,
-      scopeType: this.form.value.scopeType,
+      ...(this.data?.template || {}),
+      name: raw.name,
+      description: raw.description,
+      type: raw.type,
+      status: raw.status,
+      scopeType: raw.scopeType,
       entityFilter: {
-        scopeType: this.form.value.scopeType,
-        entityType: this.form.value.entityType,
-        entityIds
+        scopeType: raw.scopeType,
+        entityType: raw.entityType,
+        entityIds: selectedEntityIds,
       },
-      sections: this.template?.sections?.length ? this.template.sections : [
-        {
-          key: 'main-kpis',
-          type: 'KPI_GRID',
-          title: 'Indicadores principales',
-          order: 0,
-          visible: true,
-          pageBreakBefore: false,
-          config: {
-            items: [
-              {
-                key: 'pressure',
-                label: 'Presión promedio',
-                unit: 'psig',
-                aggregation: 'AVG',
-                combineEntities: true
-              }
-            ]
-          }
-        }
-      ],
+      sections: this.buildSections(selectedKeys),
       branding: {
-        companyName: this.form.value.companyName,
-        footerText: this.form.value.footerText
+        companyName: raw.companyName,
+        footerText: raw.footerText,
       },
-      outputFormat: 'PDF',
-      system: false
+      outputFormat: "PDF",
+      system: false,
     };
 
     this.reportService.saveReportTemplate(template).subscribe(() => {
@@ -111,5 +220,143 @@ export class ReportTemplateDialogComponent implements OnInit {
 
   close(): void {
     this.dialogRef.close(false);
+  }
+
+  displayEntity(entityId: any): string {
+    if (!entityId) {
+      return "";
+    }
+
+    const entity = this.entities.find((item) =>
+      item.id?.entityType === entityId.entityType && item.id?.id === entityId.id
+    );
+
+    return entity?.label || entity?.name || entityId.id || "";
+  }
+
+  private buildSections(selectedKeys: string[]): any[] {
+    const sections = [];
+    let order = 0;
+
+    if (this.form.value.includeExecutiveSummary) {
+      sections.push({
+        key: "executive-summary",
+        type: "EXECUTIVE_SUMMARY",
+        title: "Resumen ejecutivo",
+        order: order++,
+        visible: true,
+        pageBreakBefore: false,
+        config: {},
+      });
+    }
+
+    if (this.form.value.includeDataQuality) {
+      sections.push({
+        key: "data-quality",
+        type: "DATA_QUALITY",
+        title: "Calidad y tratamiento de datos",
+        order: order++,
+        visible: true,
+        pageBreakBefore: false,
+        config: {
+          keys: selectedKeys,
+        },
+      });
+    }
+
+    if (this.form.value.includeGeneralStatistics) {
+      sections.push({
+        key: "general-statistics",
+        type: "GENERAL_STATISTICS",
+        title: "Estadística general del periodo",
+        order: order++,
+        visible: true,
+        pageBreakBefore: false,
+        config: {
+          keys: selectedKeys,
+          aggregation: "AVG",
+        },
+      });
+    }
+
+    if (this.form.value.includeTimeSeriesChart) {
+      sections.push({
+        key: "time-series-chart",
+        type: "TIME_SERIES_CHART",
+        title: "Serie temporal completa",
+        order: order++,
+        visible: true,
+        pageBreakBefore: false,
+        config: {
+          keys: selectedKeys,
+          aggregation: "AVG",
+        },
+      });
+    }
+
+    if (this.form.value.includeDailyPerformance) {
+      sections.push({
+        key: "daily-performance",
+        type: "DAILY_PERFORMANCE",
+        title: "Rendimiento diario",
+        order: order++,
+        visible: true,
+        pageBreakBefore: true,
+        config: {
+          keys: selectedKeys,
+        },
+      });
+    }
+
+    if (this.form.value.includeDailyCharts) {
+      sections.push({
+        key: "daily-charts",
+        type: "DAILY_CHARTS",
+        title: "Gráficas por día",
+        order: order++,
+        visible: true,
+        pageBreakBefore: false,
+        config: {
+          keys: selectedKeys,
+        },
+      });
+    }
+
+    if (this.form.value.includeAlarms) {
+      sections.push({
+        key: "alarms",
+        type: "ALARM_SUMMARY",
+        title: "Análisis de alarmas",
+        order: order++,
+        visible: true,
+        pageBreakBefore: true,
+        config: {},
+      });
+    }
+
+    if (this.form.value.includeConclusion) {
+      sections.push({
+        key: "conclusion",
+        type: "CONCLUSION",
+        title: "Conclusión",
+        order: order++,
+        visible: true,
+        pageBreakBefore: false,
+        config: {},
+      });
+    }
+
+    return sections;
+  }
+
+  private extractKeysFromSections(sections: any[]): string[] {
+    const keys = new Set<string>();
+
+    sections.forEach((section) => {
+      const sectionKeys = section?.config?.keys || [];
+      sectionKeys.forEach((key: string) => keys.add(key));
+    });
+
+    return Array.from(keys);
   }
 }

@@ -1,10 +1,44 @@
 .dialog-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  min-width: 800px;
+  min-width: 720px;
+  max-width: 900px;
+  max-height: 72vh;
+  overflow: auto;
+}
+
+.section-block {
+  margin-bottom: 24px;
+}
+
+.section-block h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .full-width {
-  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.section-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+}
+
+@media (max-width: 760px) {
+  .dialog-content {
+    min-width: unset;
+    max-width: 100%;
+  }
+
+  .two-columns,
+  .section-options {
+    grid-template-columns: 1fr;
+  }
 }

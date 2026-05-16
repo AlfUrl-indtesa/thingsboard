@@ -1,3 +1,5 @@
+import { HttpParams } from '@angular/common/http';
+import { PageData, ReportSelectableEntity } from '../models/report.models';
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
@@ -52,4 +54,35 @@ export class ReportService {
       responseType: 'blob'
     });
   }
+  
+  getSelectableEntities(
+  entityType: 'DEVICE' | 'ASSET',
+  page: number = 0,
+  pageSize: number = 50,
+  textSearch: string = '',
+  customerId?: string
+): Observable<PageData<ReportSelectableEntity>> {
+  let params = new HttpParams()
+    .set('entityType', entityType)
+    .set('page', page)
+    .set('pageSize', pageSize);
+
+  if (textSearch) {
+    params = params.set('textSearch', textSearch);
+  }
+
+  if (customerId) {
+    params = params.set('customerId', customerId);
+  }
+
+  return this.http.get<PageData<ReportSelectableEntity>>('/api/reports/selectable-entities', { params });
+}
+
+getSelectableEntityKeys(entityType: string, entityId: string): Observable<string[]> {
+  const params = new HttpParams()
+    .set('entityType', entityType)
+    .set('entityId', entityId);
+
+  return this.http.get<string[]>('/api/reports/selectable-entity-keys', { params });
+}
 }

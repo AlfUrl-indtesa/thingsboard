@@ -108,3 +108,24 @@ export interface ReportExecution {
   errorMessage?: string;
   executionMetadata?: any;
 }
+
+export interface ReportSelectableEntity {
+  id: {
+    entityType: string;
+    id: string;
+  };
+  name: string;
+  label?: string;
+  type?: string;
+  customerId?: {
+    entityType: string;
+    id: string;
+  };
+}
+
+export interface PageData<T> {
+  data: T[];
+  totalPages: number;
+  totalElements: number;
+  hasNext: boolean;
+}

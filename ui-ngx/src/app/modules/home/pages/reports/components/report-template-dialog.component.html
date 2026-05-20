@@ -53,9 +53,31 @@
   </mat-form-field>
 
   <mat-form-field appearance="outline" class="full-width">
-    <mat-label>{{ 'reports.entity_ids_json' | translate }}</mat-label>
-    <textarea matInput rows="8" formControlName="entityIdsJson"></textarea>
-  </mat-form-field>
+  <mat-label>{{ 'reports.entities' | translate }}</mat-label>
+  <mat-select formControlName="selectedEntityIds" multiple>
+    <mat-option *ngIf="loadingEntities" disabled>
+      {{ 'reports.loading_entities' | translate }}
+    </mat-option>
+    <mat-option *ngFor="let entity of entities" [value]="entity.id">
+      {{ entity.label || entity.name }}
+      <span *ngIf="entity.type"> — {{ entity.type }}</span>
+    </mat-option>
+  </mat-select>
+  <mat-hint>{{ 'reports.entities_hint' | translate }}</mat-hint>
+</mat-form-field>
+
+<mat-form-field appearance="outline" class="full-width">
+  <mat-label>{{ 'reports.telemetry_keys' | translate }}</mat-label>
+  <mat-select formControlName="selectedKeys" multiple>
+    <mat-option *ngIf="loadingKeys" disabled>
+      {{ 'reports.loading_keys' | translate }}
+    </mat-option>
+    <mat-option *ngFor="let key of telemetryKeys" [value]="key">
+      {{ key }}
+    </mat-option>
+  </mat-select>
+  <mat-hint>{{ 'reports.telemetry_keys_hint' | translate }}</mat-hint>
+</mat-form-field>
 
 </div>
 

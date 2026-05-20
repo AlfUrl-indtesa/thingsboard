@@ -104,7 +104,15 @@
         "include_daily_performance": "Daily performance",
         "include_daily_charts": "Daily charts",
         "include_alarms": "Alarm analysis",
-        "include_conclusion": "Conclusion"
+        "include_conclusion": "Conclusion",
+        "configured_reports": "Configured reports",
+        "report": "Report",
+        "report_name": "Report name",
+        "report_configuration": "Report configuration",
+        "create_report": "Create report",
+        "update_report": "Update report",
+        "generate_report": "Generate report",
+        "report_history": "Report history"
     },
     "action": {
         "activate": "Activate",

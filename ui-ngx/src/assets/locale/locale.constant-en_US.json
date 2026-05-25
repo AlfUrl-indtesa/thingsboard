@@ -112,7 +112,9 @@
         "create_report": "Create report",
         "update_report": "Update report",
         "generate_report": "Generate report",
-        "report_history": "Report history"
+        "report_history": "Report history",
+        "telemetry_keys_required": "Select at least one telemetry key.",
+        "no_telemetry_keys": "No telemetry keys are available for the selected entities."
     },
     "action": {
         "activate": "Activate",

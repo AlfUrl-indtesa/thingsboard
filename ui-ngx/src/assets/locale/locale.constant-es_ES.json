@@ -112,7 +112,9 @@
     "create_report": "Crear reporte",
     "update_report": "Actualizar reporte",
     "generate_report": "Generar reporte",
-    "report_history": "Historial de reportes"
+    "report_history": "Historial de reportes",
+    "telemetry_keys_required": "Selecciona al menos una clave de telemetría.",
+    "no_telemetry_keys": "No hay claves de telemetría disponibles para las entidades seleccionadas."
   },
   "action": {
     "activate": "Activar",

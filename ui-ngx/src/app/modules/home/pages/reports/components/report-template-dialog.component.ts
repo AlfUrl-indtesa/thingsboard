@@ -3,7 +3,8 @@
 ///
 /// Licensed under the Apache License, Version 2.0
 ///
-
+import { forkJoin, of } from "rxjs";
+import { catchError } from "rxjs/operators";
 import { Component, Inject, OnInit } from "@angular/core";
 import { FormBuilder, FormControl, Validators } from "@angular/forms";
 import { MAT_DIALOG_DATA, MatDialogRef } from "@angular/material/dialog";
@@ -57,6 +58,7 @@ export class ReportTemplateDialogComponent implements OnInit {
     }),
     selectedKeys: new FormControl<string[]>([], {
       nonNullable: true,
+      validators: [Validators.required],
     }),
 
     companyName: new FormControl<string>("Eficentra", {
@@ -158,25 +160,51 @@ export class ReportTemplateDialogComponent implements OnInit {
       return;
     }
 
-    const firstEntity = entityIds[0];
+    const validEntityIds = entityIds.filter((entityId) =>
+      entityId?.entityType && entityId?.id
+    );
 
-    if (!firstEntity?.entityType || !firstEntity?.id) {
+    if (!validEntityIds.length) {
       this.telemetryKeys = [];
+      this.form.patchValue({ selectedKeys: [] }, { emitEvent: false });
       return;
     }
 
     this.loadingKeys = true;
 
-    this.reportService.getSelectableEntityKeys(
-      firstEntity.entityType,
-      firstEntity.id,
-    ).subscribe({
-      next: (keys) => {
-        this.telemetryKeys = keys || [];
+    const requests = validEntityIds.map((entityId) =>
+      this.reportService.getSelectableEntityKeys(
+        entityId.entityType,
+        entityId.id,
+      ).pipe(
+        catchError(() => of([] as string[])),
+      )
+    );
+
+    forkJoin(requests).subscribe({
+      next: (results) => {
+        const uniqueKeys = new Set<string>();
+
+        results.forEach((keys) => {
+          (keys || []).forEach((key) => uniqueKeys.add(key));
+        });
+
+        this.telemetryKeys = Array.from(uniqueKeys).sort();
+
+        const selectedKeys = this.form.getRawValue().selectedKeys || [];
+        const stillAvailableKeys = selectedKeys.filter((key) =>
+          uniqueKeys.has(key)
+        );
+
+        this.form.patchValue({
+          selectedKeys: stillAvailableKeys,
+        }, { emitEvent: false });
+
         this.loadingKeys = false;
       },
       error: () => {
         this.telemetryKeys = [];
+        this.form.patchValue({ selectedKeys: [] }, { emitEvent: false });
         this.loadingKeys = false;
       },
     });
@@ -191,6 +219,12 @@ export class ReportTemplateDialogComponent implements OnInit {
     const raw = this.form.getRawValue();
     const selectedEntityIds = raw.selectedEntityIds || [];
     const selectedKeys = raw.selectedKeys || [];
+
+    if (!selectedKeys.length) {
+      this.form.get("selectedKeys")?.setErrors({ required: true });
+      this.form.markAllAsTouched();
+      return;
+    }
 
     const template: ReportTemplate = {
       ...(this.data?.template || {}),

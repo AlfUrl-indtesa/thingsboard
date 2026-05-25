@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+﻿import { Component, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { finalize } from 'rxjs/operators';
 import { ReportTemplate } from '../models/report.models';
@@ -79,7 +79,7 @@ export class ReportsPageComponent implements OnInit {
     if (!template.id) {
       return;
     }
-    if (!confirm(`¿Eliminar la plantilla "${template.name}"?`)) {
+    if (!confirm(`Â¿Eliminar el reporte "${template.name}"?`)) {
       return;
     }
 

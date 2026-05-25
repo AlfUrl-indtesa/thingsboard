@@ -1,4 +1,4 @@
-<div class="executions-page">
+﻿<div class="executions-page">
   <div class="page-header">
     <h2>Historial de ejecuciones</h2>
   </div>
@@ -6,7 +6,7 @@
   <table mat-table [dataSource]="executions" class="mat-elevation-z2 full-width-table">
 
     <ng-container matColumnDef="templateNameSnapshot">
-      <th mat-header-cell *matHeaderCellDef>Plantilla</th>
+      <th mat-header-cell *matHeaderCellDef>{{ 'reports.report' | translate }}</th>
       <td mat-cell *matCellDef="let execution">{{ execution.templateNameSnapshot }}</td>
     </ng-container>
 

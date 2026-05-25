@@ -1,8 +1,8 @@
-<div class="reports-page">
+﻿<div class="reports-page">
   <div class="page-header">
     <h2>Reportes PDF</h2>
     <button mat-raised-button color="primary" (click)="openCreateDialog()">
-      Nueva plantilla
+      {{ 'reports.new_report' | translate }}
     </button>
   </div>
 
@@ -36,3 +36,4 @@
     <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
   </table>
 </div>
+

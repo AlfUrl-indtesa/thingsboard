@@ -14,6 +14,7 @@ export class ReportExecutionsPageComponent implements OnInit {
         "templateNameSnapshot",
         "status",
         "requestedTime",
+        "finishedTime",
         "actions",
     ];
     executions: ReportExecution[] = [];
@@ -34,14 +35,42 @@ export class ReportExecutionsPageComponent implements OnInit {
             });
     }
 
-    download(execution: ReportExecution): void {
-        this.reportService.downloadReport(execution.id).subscribe((blob) => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = execution.fileName || "report.pdf";
-            a.click();
-            window.URL.revokeObjectURL(url);
-        });
+    downloadExecution(execution: any): void {
+        const executionId = this.executionUuid(execution);
+
+        if (!executionId) {
+            return;
+        }
+
+        this.reportService.downloadReportExecution(executionId).subscribe(
+            (blob) => {
+                const fileName = execution.fileName || "report.pdf";
+                const url = window.URL.createObjectURL(blob);
+
+                const anchor = document.createElement("a");
+                anchor.href = url;
+                anchor.download = fileName;
+                anchor.click();
+
+                window.URL.revokeObjectURL(url);
+            },
+        );
+    }
+    private executionUuid(execution: any): string | null {
+        const id: any = execution?.id;
+
+        if (!id) {
+            return null;
+        }
+
+        if (typeof id === "string") {
+            return id;
+        }
+
+        if (id.id) {
+            return id.id;
+        }
+
+        return null;
     }
 }

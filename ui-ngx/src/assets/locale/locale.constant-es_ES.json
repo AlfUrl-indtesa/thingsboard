@@ -114,7 +114,8 @@
     "generate_report": "Generar reporte",
     "report_history": "Historial de reportes",
     "telemetry_keys_required": "Selecciona al menos una clave de telemetría.",
-    "no_telemetry_keys": "No hay claves de telemetría disponibles para las entidades seleccionadas."
+    "no_telemetry_keys": "No hay claves de telemetría disponibles para las entidades seleccionadas.",
+    "download_report": "Descargar reporte"
   },
   "action": {
     "activate": "Activar",

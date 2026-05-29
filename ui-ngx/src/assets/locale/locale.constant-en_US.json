@@ -114,7 +114,8 @@
         "generate_report": "Generate report",
         "report_history": "Report history",
         "telemetry_keys_required": "Select at least one telemetry key.",
-        "no_telemetry_keys": "No telemetry keys are available for the selected entities."
+        "no_telemetry_keys": "No telemetry keys are available for the selected entities.",
+        "download_report": "Download report"
     },
     "action": {
         "activate": "Activate",

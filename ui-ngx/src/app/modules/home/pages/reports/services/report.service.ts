@@ -66,7 +66,7 @@ export class ReportService {
     );
   }
 
-  downloadReport(executionId: string): Observable<Blob> {
+  downloadReportExecution(executionId: string): Observable<Blob> {
     return this.http.get(`/api/report-executions/${executionId}/download`, {
       responseType: "blob",
     });

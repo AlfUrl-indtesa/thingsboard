@@ -1,17 +1,19 @@
 package org.thingsboard.server.controller;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.report.ReportExecution;
 import org.thingsboard.server.service.report.ReportExecutionService;
 import org.thingsboard.server.service.report.ReportStorageService;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 @RestController
@@ -26,8 +28,10 @@ public class ReportExecutionController extends BaseController {
     @ResponseBody
     public ReportExecution getReportExecutionById(@PathVariable("executionId") String strExecutionId) throws Exception {
         checkParameter("executionId", strExecutionId);
+
         TenantId tenantId = getTenantId();
         UUID executionId = UUID.fromString(strExecutionId);
+
         return reportExecutionService.findById(tenantId, executionId);
     }
 
@@ -36,8 +40,13 @@ public class ReportExecutionController extends BaseController {
     public Page<ReportExecution> getReportExecutions(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) throws Exception {
+
         TenantId tenantId = getTenantId();
-        return reportExecutionService.findByTenantId(tenantId, PageRequest.of(page, pageSize));
+
+        return reportExecutionService.findByTenantId(
+                tenantId,
+                PageRequest.of(page, pageSize)
+        );
     }
 
     @GetMapping("/report-executions/template/{templateId}")
@@ -46,30 +55,55 @@ public class ReportExecutionController extends BaseController {
             @PathVariable("templateId") String strTemplateId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int pageSize) throws Exception {
+
         checkParameter("templateId", strTemplateId);
+
         TenantId tenantId = getTenantId();
         UUID templateId = UUID.fromString(strTemplateId);
-        return reportExecutionService.findByTenantIdAndTemplateId(tenantId, templateId, PageRequest.of(page, pageSize));
+
+        return reportExecutionService.findByTenantIdAndTemplateId(
+                tenantId,
+                templateId,
+                PageRequest.of(page, pageSize)
+        );
     }
 
     @GetMapping("/report-executions/{executionId}/download")
-    public ResponseEntity<byte[]> downloadReportExecutionFile(
-            @PathVariable("executionId") String strExecutionId) throws Exception {
+    public void downloadReportExecution(@PathVariable("executionId") String strExecutionId,
+                                        HttpServletResponse response) throws Exception {
         checkParameter("executionId", strExecutionId);
 
         TenantId tenantId = getTenantId();
         UUID executionId = UUID.fromString(strExecutionId);
 
         ReportExecution execution = reportExecutionService.findById(tenantId, executionId);
-        byte[] content = reportStorageService.loadFile(tenantId, execution);
 
-        String fileName = execution.getFileName() != null ? execution.getFileName() : "report.pdf";
-        String mimeType = execution.getMimeType() != null ? execution.getMimeType() : "application/pdf";
+        if (execution == null) {
+            throw new IllegalArgumentException("Report execution not found.");
+        }
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
-                .contentType(MediaType.parseMediaType(mimeType))
-                .contentLength(content.length)
-                .body(content);
+        byte[] fileContent = reportStorageService.loadFile(tenantId, execution);
+
+        String fileName = execution.getFileName() != null && !execution.getFileName().isBlank()
+                ? execution.getFileName()
+                : "report.pdf";
+
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+        response.setContentType(
+                execution.getMimeType() != null && !execution.getMimeType().isBlank()
+                        ? execution.getMimeType()
+                        : MediaType.APPLICATION_PDF_VALUE
+        );
+
+        response.setHeader(
+                HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename*=UTF-8''" + encodedFileName
+        );
+
+        response.setContentLength(fileContent.length);
+        response.getOutputStream().write(fileContent);
+        response.flushBuffer();
     }
 }

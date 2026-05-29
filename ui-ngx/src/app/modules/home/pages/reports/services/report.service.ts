@@ -1,24 +1,25 @@
-import { HttpParams } from '@angular/common/http';
-import { PageData, ReportSelectableEntity } from '../models/report.models';
-import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpParams } from "@angular/common/http";
+import { PageData, ReportSelectableEntity } from "../models/report.models";
+import { Injectable } from "@angular/core";
+import { HttpClient } from "@angular/common/http";
+import { Observable } from "rxjs";
 import {
   GenerateReportRequest,
   GenerateReportResponse,
   ReportExecution,
-  ReportTemplate
-} from '../models/report.models';
+  ReportTemplate,
+} from "../models/report.models";
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: "root",
 })
 export class ReportService {
-
   constructor(private http: HttpClient) {}
 
   getReportTemplates(page = 0, pageSize = 10): Observable<any> {
-    return this.http.get(`/api/report-templates?page=${page}&pageSize=${pageSize}`);
+    return this.http.get(
+      `/api/report-templates?page=${page}&pageSize=${pageSize}`,
+    );
   }
 
   getReportTemplate(templateId: string): Observable<ReportTemplate> {
@@ -26,63 +27,87 @@ export class ReportService {
   }
 
   saveReportTemplate(template: ReportTemplate): Observable<ReportTemplate> {
-    return this.http.post<ReportTemplate>('/api/report-templates', template);
+    return this.http.post<ReportTemplate>("/api/report-templates", template);
   }
 
   deleteReportTemplate(templateId: string): Observable<void> {
     return this.http.delete<void>(`/api/report-templates/${templateId}`);
   }
 
-  generateReport(templateId: string, request: GenerateReportRequest): Observable<GenerateReportResponse> {
-    return this.http.post<GenerateReportResponse>(`/api/report-templates/${templateId}/generate`, request);
+  generateReport(
+    templateId: string,
+    request: GenerateReportRequest,
+  ): Observable<GenerateReportResponse> {
+    return this.http.post<GenerateReportResponse>(
+      `/api/report-templates/${templateId}/generate`,
+      request,
+    );
   }
 
   getReportExecutions(page = 0, pageSize = 10): Observable<any> {
-    return this.http.get(`/api/report-executions?page=${page}&pageSize=${pageSize}`);
+    return this.http.get(
+      `/api/report-executions?page=${page}&pageSize=${pageSize}`,
+    );
   }
 
-  getReportExecutionsByTemplate(templateId: string, page = 0, pageSize = 10): Observable<any> {
-    return this.http.get(`/api/report-executions/template/${templateId}?page=${page}&pageSize=${pageSize}`);
+  getReportExecutionsByTemplate(
+    templateId: string,
+    page = 0,
+    pageSize = 10,
+  ): Observable<any> {
+    return this.http.get(
+      `/api/report-executions/template/${templateId}?page=${page}&pageSize=${pageSize}`,
+    );
   }
 
   getReportExecution(executionId: string): Observable<ReportExecution> {
-    return this.http.get<ReportExecution>(`/api/report-executions/${executionId}`);
+    return this.http.get<ReportExecution>(
+      `/api/report-executions/${executionId}`,
+    );
   }
 
   downloadReport(executionId: string): Observable<Blob> {
     return this.http.get(`/api/report-executions/${executionId}/download`, {
-      responseType: 'blob'
+      responseType: "blob",
     });
   }
-  
+
   getSelectableEntities(
-  entityType: 'DEVICE' | 'ASSET',
-  page: number = 0,
-  pageSize: number = 50,
-  textSearch: string = '',
-  customerId?: string
-): Observable<PageData<ReportSelectableEntity>> {
-  let params = new HttpParams()
-    .set('entityType', entityType)
-    .set('page', page)
-    .set('pageSize', pageSize);
+    entityType: "DEVICE" | "ASSET",
+    page: number = 0,
+    pageSize: number = 50,
+    textSearch: string = "",
+    customerId?: string,
+  ): Observable<PageData<ReportSelectableEntity>> {
+    let params = new HttpParams()
+      .set("entityType", entityType)
+      .set("page", page)
+      .set("pageSize", pageSize);
 
-  if (textSearch) {
-    params = params.set('textSearch', textSearch);
+    if (textSearch) {
+      params = params.set("textSearch", textSearch);
+    }
+
+    if (customerId) {
+      params = params.set("customerId", customerId);
+    }
+
+    return this.http.get<PageData<ReportSelectableEntity>>(
+      "/api/reports/selectable-entities",
+      { params },
+    );
   }
 
-  if (customerId) {
-    params = params.set('customerId', customerId);
+  getSelectableEntityKeys(
+    entityType: string,
+    entityId: string,
+  ): Observable<string[]> {
+    const params = new HttpParams()
+      .set("entityType", entityType)
+      .set("entityId", entityId);
+
+    return this.http.get<string[]>("/api/reports/selectable-entity-keys", {
+      params,
+    });
   }
-
-  return this.http.get<PageData<ReportSelectableEntity>>('/api/reports/selectable-entities', { params });
-}
-
-getSelectableEntityKeys(entityType: string, entityId: string): Observable<string[]> {
-  const params = new HttpParams()
-    .set('entityType', entityType)
-    .set('entityId', entityId);
-
-  return this.http.get<string[]>('/api/reports/selectable-entity-keys', { params });
-}
 }

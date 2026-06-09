@@ -14,13 +14,132 @@ import { GenerateReportDialogComponent } from "../components/generate-report-dia
 })
 export class ReportsPageComponent implements OnInit {
   displayedColumns = ["name", "type", "status", "actions"];
+  executionDisplayedColumns = [
+    "templateNameSnapshot",
+    "status",
+    "fileName",
+    "createdTime",
+    "actions",
+  ];
+
   templates: ReportTemplate[] = [];
+  executions: any[] = [];
+
   loading = false;
+  loadingExecutions = false;
 
   constructor(
     private reportService: ReportService,
     private dialog: MatDialog,
   ) {}
+
+  ngOnInit(): void {
+    this.refresh();
+  }
+
+  refresh(): void {
+    this.loadTemplates();
+    this.loadExecutions();
+  }
+
+  loadTemplates(): void {
+    this.loading = true;
+
+    this.reportService.getReportTemplates(0, 50)
+      .pipe(finalize(() => this.loading = false))
+      .subscribe((pageData) => {
+        this.templates = pageData.data || pageData.content || [];
+      });
+  }
+
+  loadExecutions(): void {
+    this.loadingExecutions = true;
+
+    this.reportService.getReportExecutions(0, 20)
+      .pipe(finalize(() => this.loadingExecutions = false))
+      .subscribe((pageData) => {
+        this.executions = pageData.data || pageData.content || [];
+      });
+  }
+
+  openCreateDialog(): void {
+    const dialogRef = this.dialog.open(ReportTemplateDialogComponent, {
+      width: "900px",
+      data: {},
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.refresh();
+      }
+    });
+  }
+
+  openEditDialog(template: ReportTemplate): void {
+    const dialogRef = this.dialog.open(ReportTemplateDialogComponent, {
+      width: "900px",
+      data: {
+        template,
+      },
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.refresh();
+      }
+    });
+  }
+
+  openGenerateDialog(template: ReportTemplate): void {
+    const dialogRef = this.dialog.open(GenerateReportDialogComponent, {
+      width: "600px",
+      data: template,
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.refresh();
+      }
+    });
+  }
+
+  deleteTemplate(template: ReportTemplate): void {
+    const templateId = this.templateUuid(template);
+
+    if (!templateId) {
+      return;
+    }
+
+    if (!confirm(`¿Eliminar el reporte "${template.name}"?`)) {
+      return;
+    }
+
+    this.reportService.deleteReportTemplate(templateId).subscribe(() => {
+      this.refresh();
+    });
+  }
+
+  downloadExecution(execution: any): void {
+    const executionId = this.executionUuid(execution);
+
+    if (!executionId) {
+      return;
+    }
+
+    this.reportService.downloadReportExecution(executionId).subscribe(
+      (blob) => {
+        const fileName = execution.fileName || "report.pdf";
+        const url = window.URL.createObjectURL(blob);
+
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+
+        window.URL.revokeObjectURL(url);
+      },
+    );
+  }
 
   private templateUuid(template: ReportTemplate): string | null {
     const id: any = template?.id;
@@ -40,73 +159,21 @@ export class ReportsPageComponent implements OnInit {
     return null;
   }
 
-  ngOnInit(): void {
-    this.loadTemplates();
-  }
+  private executionUuid(execution: any): string | null {
+    const id: any = execution?.id;
 
-  loadTemplates(): void {
-    this.loading = true;
-    this.reportService.getReportTemplates(0, 50)
-      .pipe(finalize(() => this.loading = false))
-      .subscribe((pageData) => {
-        this.templates = pageData.data || pageData.content || [];
-      });
-  }
-
-  openCreateDialog(): void {
-    const dialogRef = this.dialog.open(ReportTemplateDialogComponent, {
-      width: "900px",
-      data: {},
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadTemplates();
-      }
-    });
-  }
-
-  openEditDialog(template: ReportTemplate): void {
-    const dialogRef = this.dialog.open(ReportTemplateDialogComponent, {
-      width: "900px",
-      data: {
-        template,
-      },
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadTemplates();
-      }
-    });
-  }
-
-  openGenerateDialog(template: ReportTemplate): void {
-    const dialogRef = this.dialog.open(GenerateReportDialogComponent, {
-      width: "600px",
-      data: template,
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadTemplates();
-      }
-    });
-  }
-
-  deleteTemplate(template: ReportTemplate): void {
-    const templateId = this.templateUuid(template);
-
-    if (!templateId) {
-      return;
+    if (!id) {
+      return null;
     }
 
-    if (!confirm(`¿Eliminar el reporte "${template.name}"?`)) {
-      return;
+    if (typeof id === "string") {
+      return id;
     }
 
-    this.reportService.deleteReportTemplate(templateId).subscribe(() => {
-      this.loadTemplates();
-    });
+    if (id.id) {
+      return id.id;
+    }
+
+    return null;
   }
 }

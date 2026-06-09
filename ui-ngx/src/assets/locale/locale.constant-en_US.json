@@ -115,7 +115,12 @@
         "report_history": "Report history",
         "telemetry_keys_required": "Select at least one telemetry key.",
         "no_telemetry_keys": "No telemetry keys are available for the selected entities.",
-        "download_report": "Download report"
+        "download_report": "Download report",
+        "page_subtitle": "Configure, generate and download technical reports from a single screen.",
+        "generated_reports": "Generated reports",
+        "generated_reports_hint": "Recently generated PDF files appear here.",
+        "file": "File",
+        "created_time": "Created time"
     },
     "action": {
         "activate": "Activate",

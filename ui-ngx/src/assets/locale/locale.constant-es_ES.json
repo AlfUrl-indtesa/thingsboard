@@ -115,7 +115,12 @@
     "report_history": "Historial de reportes",
     "telemetry_keys_required": "Selecciona al menos una clave de telemetría.",
     "no_telemetry_keys": "No hay claves de telemetría disponibles para las entidades seleccionadas.",
-    "download_report": "Descargar reporte"
+    "download_report": "Descargar reporte",
+    "page_subtitle": "Configure, generate and download technical reports from a single screen.",
+    "generated_reports": "Generated reports",
+    "generated_reports_hint": "Recently generated PDF files appear here.",
+    "file": "File",
+    "created_time": "Created time"
   },
   "action": {
     "activate": "Activar",

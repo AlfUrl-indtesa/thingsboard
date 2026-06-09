@@ -44,7 +44,7 @@ export class ReportService {
     );
   }
 
-  getReportExecutions(page = 0, pageSize = 10): Observable<any> {
+  getReportExecutions(page = 0, pageSize = 20): Observable<any> {
     return this.http.get(
       `/api/report-executions?page=${page}&pageSize=${pageSize}`,
     );

@@ -12,3 +12,73 @@
 .full-width-table {
   width: 100%;
 }
+
+.reports-page {
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.page-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.page-header p {
+  margin: 4px 0 0;
+  opacity: 0.72;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.report-card {
+  margin-bottom: 24px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--tb-primary-card-background-color, #fff);
+}
+
+.section-header {
+  margin-bottom: 12px;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.section-header span {
+  display: block;
+  margin-top: 4px;
+  opacity: 0.72;
+}
+
+.full-width-table {
+  width: 100%;
+}
+
+.actions-cell {
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+}

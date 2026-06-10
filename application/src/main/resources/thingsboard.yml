@@ -117,13 +117,13 @@ app:
 # Reports Parameters
 report:
   storage:
-    base-dir: /opt/thingsboard/data/reports
+    base-dir: "${REPORT_STORAGE_BASE_DIR:/opt/thingsboard/data/reports}"
 
   render:
-    base-url: http://127.0.0.1:3000
-    render-path: /render-report
-    connect-timeout-ms: 5000
-    read-timeout-ms: 120000
+    base-url: "${REPORT_RENDER_BASE_URL:http://127.0.0.1:3000}"
+    render-path: "${REPORT_RENDER_PATH:/render-report}"
+    connect-timeout-ms: "${REPORT_RENDER_CONNECT_TIMEOUT_MS:5000}"
+    read-timeout-ms: "${REPORT_RENDER_READ_TIMEOUT_MS:120000}"
 
 # ZooKeeper connection parameters
 # Controls ZooKeeper-based service discovery and cluster coordination for microservice deployments.

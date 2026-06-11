@@ -120,7 +120,8 @@
     "generated_reports": "Generated reports",
     "generated_reports_hint": "Recently generated PDF files appear here.",
     "file": "File",
-    "created_time": "Created time"
+    "created_time": "Created time",
+    "delete_generated_report": "Borrar Generado"
   },
   "action": {
     "activate": "Activar",

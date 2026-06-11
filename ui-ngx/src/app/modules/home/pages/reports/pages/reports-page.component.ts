@@ -14,13 +14,7 @@ import { GenerateReportDialogComponent } from "../components/generate-report-dia
 })
 export class ReportsPageComponent implements OnInit {
   displayedColumns = ["name", "type", "status", "actions"];
-  executionDisplayedColumns = [
-    "templateNameSnapshot",
-    "status",
-    "fileName",
-    "createdTime",
-    "actions",
-  ];
+  executionDisplayedColumns = ["status", "fileName", "createdTime", "actions"];
 
   templates: ReportTemplate[] = [];
   executions: any[] = [];
@@ -161,6 +155,37 @@ export class ReportsPageComponent implements OnInit {
 
   private executionUuid(execution: any): string | null {
     const id: any = execution?.id;
+
+    if (!id) {
+      return null;
+    }
+
+    if (typeof id === "string") {
+      return id;
+    }
+
+    if (id.id) {
+      return id.id;
+    }
+
+    return null;
+  }
+
+  executionsForTemplate(template: ReportTemplate): any[] {
+    const templateId = this.templateUuid(template);
+
+    if (!templateId) {
+      return [];
+    }
+
+    return this.executions.filter((execution) => {
+      const executionTemplateId = this.executionTemplateUuid(execution);
+      return executionTemplateId === templateId;
+    });
+  }
+
+  private executionTemplateUuid(execution: any): string | null {
+    const id: any = execution?.templateId;
 
     if (!id) {
       return null;

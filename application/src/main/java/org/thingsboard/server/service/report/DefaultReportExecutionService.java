@@ -22,7 +22,6 @@ public class DefaultReportExecutionService implements ReportExecutionService {
     private final ReportPayloadBuilderService reportPayloadBuilderService;
     private final ReportRenderService reportRenderService;
     private final ReportStorageService reportStorageService;
-    
 
     @Override
     public ReportExecution generate(TenantId tenantId, UUID userId, UUID templateId, GenerateReportRequest request) {
@@ -119,6 +118,15 @@ public class DefaultReportExecutionService implements ReportExecutionService {
     @Override
     public Page<ReportExecution> findByTenantIdAndTemplateId(TenantId tenantId, UUID templateId, Pageable pageable) {
         return reportExecutionDao.findByTenantIdAndTemplateId(tenantId, templateId, pageable);
+    }
+
+    @Override
+    public void delete(TenantId tenantId, UUID executionId) {
+        ReportExecution execution = findById(tenantId, executionId);
+
+        reportStorageService.deleteFile(tenantId, execution);
+
+        reportExecutionDao.removeById(tenantId, executionId);
     }
 
 }

@@ -21,89 +21,96 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ReportExecutionController extends BaseController {
 
-    private final ReportExecutionService reportExecutionService;
-    private final ReportStorageService reportStorageService;
+        private final ReportExecutionService reportExecutionService;
+        private final ReportStorageService reportStorageService;
 
-    @GetMapping("/report-executions/{executionId}")
-    @ResponseBody
-    public ReportExecution getReportExecutionById(@PathVariable("executionId") String strExecutionId) throws Exception {
-        checkParameter("executionId", strExecutionId);
+        @GetMapping("/report-executions/{executionId}")
+        @ResponseBody
+        public ReportExecution getReportExecutionById(@PathVariable("executionId") String strExecutionId)
+                        throws Exception {
+                checkParameter("executionId", strExecutionId);
 
-        TenantId tenantId = getTenantId();
-        UUID executionId = UUID.fromString(strExecutionId);
+                TenantId tenantId = getTenantId();
+                UUID executionId = UUID.fromString(strExecutionId);
 
-        return reportExecutionService.findById(tenantId, executionId);
-    }
-
-    @GetMapping("/report-executions")
-    @ResponseBody
-    public Page<ReportExecution> getReportExecutions(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int pageSize) throws Exception {
-
-        TenantId tenantId = getTenantId();
-
-        return reportExecutionService.findByTenantId(
-                tenantId,
-                PageRequest.of(page, pageSize)
-        );
-    }
-
-    @GetMapping("/report-executions/template/{templateId}")
-    @ResponseBody
-    public Page<ReportExecution> getReportExecutionsByTemplateId(
-            @PathVariable("templateId") String strTemplateId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int pageSize) throws Exception {
-
-        checkParameter("templateId", strTemplateId);
-
-        TenantId tenantId = getTenantId();
-        UUID templateId = UUID.fromString(strTemplateId);
-
-        return reportExecutionService.findByTenantIdAndTemplateId(
-                tenantId,
-                templateId,
-                PageRequest.of(page, pageSize)
-        );
-    }
-
-    @GetMapping("/report-executions/{executionId}/download")
-    public void downloadReportExecution(@PathVariable("executionId") String strExecutionId,
-                                        HttpServletResponse response) throws Exception {
-        checkParameter("executionId", strExecutionId);
-
-        TenantId tenantId = getTenantId();
-        UUID executionId = UUID.fromString(strExecutionId);
-
-        ReportExecution execution = reportExecutionService.findById(tenantId, executionId);
-
-        if (execution == null) {
-            throw new IllegalArgumentException("Report execution not found.");
+                return reportExecutionService.findById(tenantId, executionId);
         }
 
-        byte[] fileContent = reportStorageService.loadFile(tenantId, execution);
+        @GetMapping("/report-executions")
+        @ResponseBody
+        public Page<ReportExecution> getReportExecutions(
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "10") int pageSize) throws Exception {
 
-        String fileName = execution.getFileName() != null && !execution.getFileName().isBlank()
-                ? execution.getFileName()
-                : "report.pdf";
+                TenantId tenantId = getTenantId();
 
-        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8)
-                .replace("+", "%20");
+                return reportExecutionService.findByTenantId(
+                                tenantId,
+                                PageRequest.of(page, pageSize));
+        }
 
-        response.setContentType(
-                execution.getMimeType() != null && !execution.getMimeType().isBlank()
-                        ? execution.getMimeType()
-                        : MediaType.APPLICATION_PDF_VALUE
-        );
+        @GetMapping("/report-executions/template/{templateId}")
+        @ResponseBody
+        public Page<ReportExecution> getReportExecutionsByTemplateId(
+                        @PathVariable("templateId") String strTemplateId,
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "10") int pageSize) throws Exception {
 
-        response.setHeader(
-                HttpHeaders.CONTENT_DISPOSITION,
-                "attachment; filename*=UTF-8''" + encodedFileName
-        );
+                checkParameter("templateId", strTemplateId);
 
-        response.setContentLength(fileContent.length);
-        response.getOutputStream().write(fileContent);
-        response.flushBuffer();
-    }
+                TenantId tenantId = getTenantId();
+                UUID templateId = UUID.fromString(strTemplateId);
+
+                return reportExecutionService.findByTenantIdAndTemplateId(
+                                tenantId,
+                                templateId,
+                                PageRequest.of(page, pageSize));
+        }
+
+        @DeleteMapping("/report-executions/{executionId}")
+        public void deleteReportExecution(@PathVariable("executionId") String strExecutionId) throws Exception {
+                checkParameter("executionId", strExecutionId);
+
+                TenantId tenantId = getTenantId();
+                UUID executionId = UUID.fromString(strExecutionId);
+
+                reportExecutionService.delete(tenantId, executionId);
+        }
+
+        @GetMapping("/report-executions/{executionId}/download")
+        public void downloadReportExecution(@PathVariable("executionId") String strExecutionId,
+                        HttpServletResponse response) throws Exception {
+                checkParameter("executionId", strExecutionId);
+
+                TenantId tenantId = getTenantId();
+                UUID executionId = UUID.fromString(strExecutionId);
+
+                ReportExecution execution = reportExecutionService.findById(tenantId, executionId);
+
+                if (execution == null) {
+                        throw new IllegalArgumentException("Report execution not found.");
+                }
+
+                byte[] fileContent = reportStorageService.loadFile(tenantId, execution);
+
+                String fileName = execution.getFileName() != null && !execution.getFileName().isBlank()
+                                ? execution.getFileName()
+                                : "report.pdf";
+
+                String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8)
+                                .replace("+", "%20");
+
+                response.setContentType(
+                                execution.getMimeType() != null && !execution.getMimeType().isBlank()
+                                                ? execution.getMimeType()
+                                                : MediaType.APPLICATION_PDF_VALUE);
+
+                response.setHeader(
+                                HttpHeaders.CONTENT_DISPOSITION,
+                                "attachment; filename*=UTF-8''" + encodedFileName);
+
+                response.setContentLength(fileContent.length);
+                response.getOutputStream().write(fileContent);
+                response.flushBuffer();
+        }
 }

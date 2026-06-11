@@ -24,10 +24,10 @@ public class DefaultReportStorageService implements ReportStorageService {
 
     @Override
     public ReportExecution storeGeneratedFile(TenantId tenantId,
-                                              ReportExecution execution,
-                                              byte[] content,
-                                              String fileName,
-                                              String mimeType) {
+            ReportExecution execution,
+            byte[] content,
+            String fileName,
+            String mimeType) {
         validateStoreInputs(tenantId, execution, content, fileName, mimeType);
 
         try {
@@ -51,8 +51,7 @@ public class DefaultReportStorageService implements ReportStorageService {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_STORAGE_FAILED,
                     "Failed to store generated report file",
-                    e
-            );
+                    e);
         }
     }
 
@@ -65,22 +64,42 @@ public class DefaultReportStorageService implements ReportStorageService {
             if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) {
                 throw new ReportServiceException(
                         ReportErrorCode.FILE_NOT_FOUND,
-                        "Stored report file not found: " + execution.getFilePath()
-                );
+                        "Stored report file not found: " + execution.getFilePath());
             }
             return Files.readAllBytes(filePath);
         } catch (IOException e) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_NOT_FOUND,
                     "Failed to read stored report file",
-                    e
-            );
+                    e);
+        }
+    }
+
+    @Override
+    public void deleteFile(TenantId tenantId, ReportExecution execution) {
+        if (tenantId == null || execution == null) {
+            return;
+        }
+
+        if (execution.getFilePath() == null || execution.getFilePath().isBlank()) {
+            return;
+        }
+
+        try {
+            Path filePath = Paths.get(execution.getFilePath());
+            Files.deleteIfExists(filePath);
+        } catch (IOException e) {
+            throw new ReportServiceException(
+                    ReportErrorCode.FILE_STORAGE_FAILED,
+                    "Failed to delete generated report file: " + e.getMessage(),
+                    e);
         }
     }
 
     @Override
     public boolean exists(TenantId tenantId, ReportExecution execution) {
-        if (tenantId == null || execution == null || execution.getFilePath() == null || execution.getFilePath().isBlank()) {
+        if (tenantId == null || execution == null || execution.getFilePath() == null
+                || execution.getFilePath().isBlank()) {
             return false;
         }
         Path filePath = Paths.get(execution.getFilePath());
@@ -88,39 +107,34 @@ public class DefaultReportStorageService implements ReportStorageService {
     }
 
     private void validateStoreInputs(TenantId tenantId,
-                                     ReportExecution execution,
-                                     byte[] content,
-                                     String fileName,
-                                     String mimeType) {
+            ReportExecution execution,
+            byte[] content,
+            String fileName,
+            String mimeType) {
         if (tenantId == null) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_STORAGE_FAILED,
-                    "TenantId is required for file storage"
-            );
+                    "TenantId is required for file storage");
         }
         if (execution == null || execution.getId() == null) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_STORAGE_FAILED,
-                    "Execution with valid id is required for file storage"
-            );
+                    "Execution with valid id is required for file storage");
         }
         if (content == null || content.length == 0) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_STORAGE_FAILED,
-                    "Generated file content is empty"
-            );
+                    "Generated file content is empty");
         }
         if (fileName == null || fileName.isBlank()) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_STORAGE_FAILED,
-                    "File name is required"
-            );
+                    "File name is required");
         }
         if (mimeType == null || mimeType.isBlank()) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_STORAGE_FAILED,
-                    "Mime type is required"
-            );
+                    "Mime type is required");
         }
     }
 
@@ -128,26 +142,22 @@ public class DefaultReportStorageService implements ReportStorageService {
         if (tenantId == null) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_NOT_FOUND,
-                    "TenantId is required for file loading"
-            );
+                    "TenantId is required for file loading");
         }
         if (execution == null) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_NOT_FOUND,
-                    "Execution is required for file loading"
-            );
+                    "Execution is required for file loading");
         }
         if (execution.getStorageType() != ReportStorageType.LOCAL_FILE_SYSTEM) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_NOT_FOUND,
-                    "Unsupported storage type for file loading: " + execution.getStorageType()
-            );
+                    "Unsupported storage type for file loading: " + execution.getStorageType());
         }
         if (execution.getFilePath() == null || execution.getFilePath().isBlank()) {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_NOT_FOUND,
-                    "Execution does not contain a valid file path"
-            );
+                    "Execution does not contain a valid file path");
         }
     }
 
@@ -170,8 +180,7 @@ public class DefaultReportStorageService implements ReportStorageService {
             throw new ReportServiceException(
                     ReportErrorCode.FILE_STORAGE_FAILED,
                     "SHA-256 algorithm not available",
-                    e
-            );
+                    e);
         }
     }
 }

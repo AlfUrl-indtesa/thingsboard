@@ -19,19 +19,18 @@
       <th mat-header-cell *matHeaderCellDef>Solicitado</th>
       <td mat-cell *matCellDef="let execution">{{ execution.requestedTime | date:'medium' }}</td>
     </ng-container>
-    
+
     <ng-container matColumnDef="actions">
-  <th mat-header-cell *matHeaderCellDef>{{ 'reports.actions' | translate }}</th>
-  <td mat-cell *matCellDef="let execution">
-    <button
-      mat-button
-      color="primary"
-      [disabled]="!execution.fileName"
-      (click)="downloadExecution(execution)">
-      {{ 'reports.download' | translate }}
-    </button>
-  </td>
-</ng-container>
+      <th mat-header-cell *matHeaderCellDef>{{ 'reports.actions' | translate }}</th>
+      <td mat-cell *matCellDef="let execution">
+        <button mat-button color="primary" [disabled]="!execution.fileName" (click)="downloadExecution(execution)">
+          {{ 'reports.download' | translate }}
+        </button>
+        <button mat-button color="warn" [disabled]="!execution.fileName" (click)="deleteExecution(execution)">
+          {{ 'reports.delete_generated_report' | translate }}
+        </button>
+      </td>
+    </ng-container>
 
     <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
     <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>

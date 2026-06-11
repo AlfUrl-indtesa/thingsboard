@@ -14,4 +14,6 @@ public interface ReportStorageService {
     byte[] loadFile(TenantId tenantId, ReportExecution execution);
 
     boolean exists(TenantId tenantId, ReportExecution execution);
+
+    void deleteFile(TenantId tenantId, ReportExecution execution);
 }

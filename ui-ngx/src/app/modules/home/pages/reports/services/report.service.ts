@@ -72,6 +72,10 @@ export class ReportService {
     });
   }
 
+  deleteReportExecution(executionId: string): Observable<void> {
+    return this.http.delete<void>(`/api/report-executions/${executionId}`);
+  }
+
   getSelectableEntities(
     entityType: "DEVICE" | "ASSET",
     page: number = 0,

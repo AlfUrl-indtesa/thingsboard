@@ -56,6 +56,28 @@ export class ReportExecutionsPageComponent implements OnInit {
             },
         );
     }
+
+    deleteExecution(execution: any): void {
+        const executionId = this.executionUuid(execution);
+
+        if (!executionId) {
+            return;
+        }
+
+        if (
+            !confirm(
+                `¿Eliminar el reporte generado "${
+                    execution.fileName || executionId
+                }"?`,
+            )
+        ) {
+            return;
+        }
+
+        this.reportService.deleteReportExecution(executionId).subscribe(() => {
+            this.refresh();
+        });
+    }
     private executionUuid(execution: any): string | null {
         const id: any = execution?.id;
 

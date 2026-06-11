@@ -17,4 +17,6 @@ public interface ReportExecutionService {
     Page<ReportExecution> findByTenantId(TenantId tenantId, Pageable pageable);
 
     Page<ReportExecution> findByTenantIdAndTemplateId(TenantId tenantId, UUID templateId, Pageable pageable);
+
+    void delete(TenantId tenantId, UUID executionId);
 }

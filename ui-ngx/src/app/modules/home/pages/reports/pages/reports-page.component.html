@@ -100,6 +100,9 @@
           <button mat-button color="primary" [disabled]="!execution.fileName" (click)="downloadExecution(execution)">
             {{ 'reports.download' | translate }}
           </button>
+          <button mat-button color="warn" [disabled]="!execution.fileName" (click)="deleteExecution(execution)">
+            {{ 'reports.delete_generated_report' | translate }}
+          </button>
         </td>
       </ng-container>
 

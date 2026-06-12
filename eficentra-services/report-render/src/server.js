@@ -253,6 +253,7 @@ function renderTable(doc, columns, rows) {
     });
 
     doc.y = y + 12;
+    
     let value = row[col.key] !== undefined && row[col.key] !== null ? row[col.key] : '-';
 
     if (col.key === 'firstTs' || col.key === 'lastTs') {

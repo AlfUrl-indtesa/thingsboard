@@ -35,6 +35,10 @@ export class ReportExecutionsPageComponent implements OnInit {
             });
     }
 
+    refresh(): void {
+        this.loadExecutions();
+    }
+
     downloadExecution(execution: any): void {
         const executionId = this.executionUuid(execution);
 

@@ -524,6 +524,23 @@ function drawLineChart(doc, points, box) {
         .lineWidth(1);
 }
 
+function cleanObservation(text, payload) {
+    let result = String(text || '');
+
+    const entities = payload?.context?.entities || [];
+
+    entities.forEach(entity => {
+        const entityId = entity?.entityId;
+        const entityName = entity?.name || entity?.label || entityId;
+
+        if (entityId && entityName) {
+            result = result.replaceAll(String(entityId), String(entityName));
+        }
+    });
+
+    return result;
+}
+
 function renderObservations(doc, payload) {
     const observations = payload?.summary?.observations || payload?.data?.observations || [];
 
@@ -537,7 +554,7 @@ function renderObservations(doc, payload) {
     observations.forEach(obs => {
         ensureSpace(doc, 45);
 
-        const text = cleanObservation ? cleanObservation(obs, payload) : String(obs);
+        const text = cleanObservation(obs, payload);
 
         doc.fontSize(9)
             .fillColor('#333333')

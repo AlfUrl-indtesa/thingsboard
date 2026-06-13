@@ -306,6 +306,7 @@ function renderCharts(doc, payload) {
         return;
     }
 
+    ensureSpace(doc, 280);
     sectionTitle(doc, 'Gráficas de serie temporal');
 
     series.forEach(item => {
@@ -315,52 +316,195 @@ function renderCharts(doc, payload) {
             return;
         }
 
-        ensureSpace(doc, 230);
+        ensureSpace(doc, 300);
+
+        const title = `${item.label || item.key} - ${item.entityName || ''}`;
 
         doc.fontSize(12)
             .fillColor('#111111')
-            .text(`${item.label || item.key} - ${item.entityName || ''}`);
+            .text(safeText(title, 80), {
+                width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+                lineBreak: false
+            });
 
-        doc.moveDown(0.5);
+        doc.moveDown(0.6);
 
-        drawLineChart(doc, points, {
+        const chartBox = {
             x: doc.page.margins.left,
             y: doc.y,
             width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-            height: 170
-        });
+            height: 150
+        };
 
-        doc.y += 190;
+        drawLineChart(doc, points, chartBox);
+
+        doc.y = chartBox.y + chartBox.height + 14;
+
+        renderSeriesMiniTable(doc, item);
+
+        doc.moveDown(1);
     });
 }
 
-function drawLineChart(doc, points, box) {
-    const values = points
-        .map(p => Number(p.value))
-        .filter(v => Number.isFinite(v));
+function renderSeriesMiniTable(doc, series) {
+    const points = series.points || [];
+    const stats = calculateStats(points);
 
-    if (!values.length) {
+    if (!stats) {
         return;
     }
 
+    const columns = [
+        { key: 'samples', label: 'Muestras', align: 'right' },
+        { key: 'min', label: 'Mínimo', align: 'right' },
+        { key: 'max', label: 'Máximo', align: 'right' },
+        { key: 'avg', label: 'Promedio', align: 'right' },
+        { key: 'firstTs', label: 'Primera muestra', align: 'right' },
+        { key: 'lastTs', label: 'Última muestra', align: 'right' }
+    ];
+
+    const rows = [
+        {
+            samples: stats.count,
+            min: formatNumber(stats.min),
+            max: formatNumber(stats.max),
+            avg: formatNumber(stats.avg),
+            firstTs: formatTableDate(stats.firstTs),
+            lastTs: formatTableDate(stats.lastTs)
+        }
+    ];
+
+    renderCompactTable(doc, columns, rows);
+}
+
+function calculateStats(points) {
+    const valid = (points || [])
+        .filter(p => p && Number.isFinite(Number(p.value)))
+        .map(p => ({
+            ts: Number(p.ts),
+            value: Number(p.value)
+        }));
+
+    if (!valid.length) {
+        return null;
+    }
+
+    let min = valid[0].value;
+    let max = valid[0].value;
+    let sum = 0;
+    let firstTs = valid[0].ts;
+    let lastTs = valid[0].ts;
+
+    valid.forEach(point => {
+        min = Math.min(min, point.value);
+        max = Math.max(max, point.value);
+        sum += point.value;
+        firstTs = Math.min(firstTs, point.ts);
+        lastTs = Math.max(lastTs, point.ts);
+    });
+
+    return {
+        count: valid.length,
+        min,
+        max,
+        avg: sum / valid.length,
+        firstTs,
+        lastTs
+    };
+}
+
+function renderCompactTable(doc, columns, rows) {
+    const startX = doc.page.margins.left;
+    const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const rowHeight = 18;
+    const colWidth = tableWidth / columns.length;
+
+    ensureSpace(doc, rowHeight * 3);
+
+    let y = doc.y;
+
+    doc.rect(startX, y, tableWidth, rowHeight).fill('#EAF1F8');
+
+    columns.forEach((col, i) => {
+        doc.fillColor('#0B2239')
+            .fontSize(7)
+            .text(col.label, startX + i * colWidth + 3, y + 6, {
+                width: colWidth - 6,
+                align: col.align || 'left',
+                lineBreak: false
+            });
+    });
+
+    y += rowHeight;
+
+    rows.forEach(row => {
+        doc.rect(startX, y, tableWidth, rowHeight).fill('#FFFFFF');
+
+        columns.forEach((col, i) => {
+            const value = row[col.key] !== undefined && row[col.key] !== null ? String(row[col.key]) : '-';
+
+            doc.fillColor('#222222')
+                .fontSize(7)
+                .text(safeText(value, 22), startX + i * colWidth + 3, y + 6, {
+                    width: colWidth - 6,
+                    align: col.align || 'left',
+                    lineBreak: false
+                });
+        });
+
+        y += rowHeight;
+    });
+
+    doc.y = y + 10;
+}
+
+function drawLineChart(doc, points, box) {
+    const validPoints = (points || [])
+        .filter(p => p && Number.isFinite(Number(p.value)) && Number.isFinite(Number(p.ts)))
+        .map(p => ({
+            ts: Number(p.ts),
+            value: Number(p.value)
+        }))
+        .sort((a, b) => a.ts - b.ts);
+
+    if (!validPoints.length) {
+        return;
+    }
+
+    const values = validPoints.map(p => p.value);
+    const times = validPoints.map(p => p.ts);
+
     const min = Math.min(...values);
     const max = Math.max(...values);
-    const range = max - min || 1;
+    const minTs = Math.min(...times);
+    const maxTs = Math.max(...times);
 
-    doc.rect(box.x, box.y, box.width, box.height)
-        .stroke('#DCE6EF');
+    const valueRange = max - min || 1;
+    const timeRange = maxTs - minTs || 1;
+
+    doc.rect(box.x, box.y, box.width, box.height).stroke('#DCE6EF');
 
     doc.fontSize(8).fillColor('#666666');
-    doc.text(`Máx: ${formatNumber(max)}`, box.x, box.y - 12);
-    doc.text(`Mín: ${formatNumber(min)}`, box.x + 85, box.y - 12);
+    doc.text(`Máx: ${formatNumber(max)}`, box.x, box.y - 12, { lineBreak: false });
+    doc.text(`Mín: ${formatNumber(min)}`, box.x + 85, box.y - 12, { lineBreak: false });
 
-    const chartPoints = points
-        .filter(p => Number.isFinite(Number(p.value)))
-        .map((p, index) => {
-            const x = box.x + (index / Math.max(points.length - 1, 1)) * box.width;
-            const y = box.y + box.height - ((Number(p.value) - min) / range) * box.height;
-            return { x, y };
-        });
+    doc.fontSize(7).fillColor('#666666');
+    doc.text(formatShortDate(minTs), box.x, box.y + box.height + 4, {
+        width: 140,
+        lineBreak: false
+    });
+
+    doc.text(formatShortDate(maxTs), box.x + box.width - 140, box.y + box.height + 4, {
+        width: 140,
+        align: 'right',
+        lineBreak: false
+    });
+
+    const chartPoints = validPoints.map(point => {
+        const x = box.x + ((point.ts - minTs) / timeRange) * box.width;
+        const y = box.y + box.height - ((point.value - min) / valueRange) * box.height;
+        return { x, y };
+    });
 
     if (chartPoints.length < 2) {
         return;
@@ -387,33 +531,51 @@ function renderObservations(doc, payload) {
         return;
     }
 
+    ensureSpace(doc, 160);
     sectionTitle(doc, 'Observaciones técnicas');
 
     observations.forEach(obs => {
-        ensureSpace(doc, 28);
-        doc.fontSize(10)
+        ensureSpace(doc, 45);
+
+        const text = cleanObservation ? cleanObservation(obs, payload) : String(obs);
+
+        doc.fontSize(9)
             .fillColor('#333333')
-            .text(`• ${obs}`, {
-                width: doc.page.width - doc.page.margins.left - doc.page.margins.right
+            .text(`• ${text}`, {
+                width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+                align: 'left',
+                lineGap: 2
             });
-        doc.moveDown(0.4);
+
+        doc.moveDown(0.45);
     });
 }
 
 function renderConclusion(doc, payload) {
+    ensureSpace(doc, 150);
     sectionTitle(doc, 'Conclusión');
 
     const kpis = payload?.summary?.kpis || [];
     const observations = payload?.summary?.observations || [];
 
-    doc.fontSize(10)
+    const text = `El reporte fue generado correctamente con ${kpis.length} indicador(es) y ${observations.length} observación(es) técnicas. La información presentada permite revisar el comportamiento operativo del periodo seleccionado y detectar variaciones relevantes en las variables monitoreadas.`;
+
+    doc.fontSize(9)
         .fillColor('#333333')
-        .text(`El reporte fue generado correctamente con ${kpis.length} indicador(es) y ${observations.length} observación(es) técnicas. La información presentada permite revisar el comportamiento operativo del periodo seleccionado y detectar variaciones relevantes en las variables monitoreadas.`);
+        .text(text, {
+            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            align: 'left',
+            lineGap: 2
+        });
 
     doc.moveDown(2);
-    doc.fontSize(9)
+
+    doc.fontSize(8)
         .fillColor('#666666')
-        .text(payload?.branding?.footerText || 'Reporte generado por Eficentra');
+        .text(payload?.branding?.footerText || 'Reporte generado por Eficentra', {
+            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            align: 'left'
+        });
 }
 
 function sectionTitle(doc, title) {
@@ -445,6 +607,21 @@ function formatIsoDate(value) {
     } catch (e) {
         return value;
     }
+}
+
+function formatShortDate(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return '-';
+    }
+
+    return new Date(number).toLocaleString('es-MX', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 }
 
 function formatTimestamp(value) {

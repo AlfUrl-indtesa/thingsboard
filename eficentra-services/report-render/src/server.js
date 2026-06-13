@@ -207,8 +207,18 @@ function renderStatisticsTables(doc, payload) {
 function renderTable(doc, columns, rows) {
     const startX = doc.page.margins.left;
     const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const rowHeight = 22;
-    const colWidth = tableWidth / columns.length;
+    const rowHeight = 24;
+
+    const columnWeights = columns.map(col => {
+        if (col.key === 'entity') return 1.6;
+        if (col.key === 'key') return 1.1;
+        if (col.key === 'samples') return 0.8;
+        if (col.key === 'firstTs' || col.key === 'lastTs') return 1.35;
+        return 0.9;
+    });
+
+    const totalWeight = columnWeights.reduce((sum, weight) => sum + weight, 0);
+    const colWidths = columnWeights.map(weight => (tableWidth * weight) / totalWeight);
 
     ensureSpace(doc, rowHeight * 3);
 
@@ -216,51 +226,77 @@ function renderTable(doc, columns, rows) {
 
     doc.rect(startX, y, tableWidth, rowHeight).fill('#0B2239');
 
+    let x = startX;
     columns.forEach((col, i) => {
         doc.fillColor('#FFFFFF')
-            .fontSize(8)
-            .text(col.label || col.key, startX + (i * colWidth) + 4, y + 7, {
-                width: colWidth - 8,
+            .fontSize(7)
+            .text(col.label || col.key, x + 4, y + 7, {
+                width: colWidths[i] - 8,
                 align: col.align || 'left'
             });
+
+        x += colWidths[i];
     });
 
     y += rowHeight;
 
     rows.forEach((row, rowIndex) => {
-        ensureSpace(doc, rowHeight + 8);
-
         if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
             doc.addPage();
             y = doc.y;
+
+            doc.rect(startX, y, tableWidth, rowHeight).fill('#0B2239');
+
+            let headerX = startX;
+            columns.forEach((col, i) => {
+                doc.fillColor('#FFFFFF')
+                    .fontSize(7)
+                    .text(col.label || col.key, headerX + 4, y + 7, {
+                        width: colWidths[i] - 8,
+                        align: col.align || 'left'
+                    });
+
+                headerX += colWidths[i];
+            });
+
+            y += rowHeight;
         }
 
         doc.rect(startX, y, tableWidth, rowHeight)
             .fill(rowIndex % 2 === 0 ? '#FFFFFF' : '#F5F8FB');
 
+        let cellX = startX;
+
         columns.forEach((col, i) => {
-            const value = row[col.key] !== undefined && row[col.key] !== null ? String(row[col.key]) : '-';
+            let value = row[col.key] !== undefined && row[col.key] !== null ? row[col.key] : '-';
+
+            if (col.key === 'firstTs' || col.key === 'lastTs') {
+                value = formatTableDate(value);
+            }
+
+            if (col.key === 'entity') {
+                value = safeText(value, 20);
+            } else if (col.key === 'firstTs' || col.key === 'lastTs') {
+                value = safeText(value, 18);
+            } else {
+                value = safeText(value, 26);
+            }
 
             doc.fillColor('#222222')
-                .fontSize(8)
-                .text(value, startX + (i * colWidth) + 4, y + 7, {
-                    width: colWidth - 8,
-                    align: col.align || 'left'
+                .fontSize(7)
+                .text(String(value), cellX + 4, y + 7, {
+                    width: colWidths[i] - 8,
+                    align: col.align || 'left',
+                    lineBreak: false
                 });
+
+            cellX += colWidths[i];
         });
 
         y += rowHeight;
     });
 
     doc.y = y + 12;
-    
-    let value = row[col.key] !== undefined && row[col.key] !== null ? row[col.key] : '-';
-
-    if (col.key === 'firstTs' || col.key === 'lastTs') {
-        value = formatTableDate(value);
-    }
-
-    value = safeText(value, col.key === 'entity' ? 24 : 36);
 }
 
 function renderCharts(doc, payload) {

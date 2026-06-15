@@ -341,6 +341,7 @@ function renderCharts(doc, payload) {
         doc.y = chartBox.y + chartBox.height + 14;
 
         renderSeriesMiniTable(doc, item);
+        resetCursor(doc);
 
         doc.moveDown(1);
     });
@@ -456,6 +457,7 @@ function renderCompactTable(doc, columns, rows) {
     });
 
     doc.y = y + 10;
+    resetCursor(doc);
 }
 
 function drawLineChart(doc, points, box) {
@@ -548,28 +550,33 @@ function renderObservations(doc, payload) {
         return;
     }
 
-    ensureSpace(doc, 160);
+    ensureSpace(doc, 180);
+    resetCursor(doc);
     sectionTitle(doc, 'Observaciones técnicas');
 
     observations.forEach(obs => {
-        ensureSpace(doc, 45);
+        resetCursor(doc);
+        ensureSpace(doc, 42);
+        resetCursor(doc);
 
         const text = cleanObservation(obs, payload);
 
         doc.fontSize(9)
             .fillColor('#333333')
-            .text(`• ${text}`, {
+            .text(`• ${text}`, doc.page.margins.left, doc.y, {
                 width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
                 align: 'left',
                 lineGap: 2
             });
 
         doc.moveDown(0.45);
+        resetCursor(doc);
     });
 }
 
 function renderConclusion(doc, payload) {
-    ensureSpace(doc, 150);
+    ensureSpace(doc, 170);
+    resetCursor(doc);
     sectionTitle(doc, 'Conclusión');
 
     const kpis = payload?.summary?.kpis || [];
@@ -577,44 +584,61 @@ function renderConclusion(doc, payload) {
 
     const text = `El reporte fue generado correctamente con ${kpis.length} indicador(es) y ${observations.length} observación(es) técnicas. La información presentada permite revisar el comportamiento operativo del periodo seleccionado y detectar variaciones relevantes en las variables monitoreadas.`;
 
+    resetCursor(doc);
+
     doc.fontSize(9)
         .fillColor('#333333')
-        .text(text, {
+        .text(text, doc.page.margins.left, doc.y, {
             width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
             align: 'left',
             lineGap: 2
         });
 
     doc.moveDown(2);
+    resetCursor(doc);
 
     doc.fontSize(8)
         .fillColor('#666666')
-        .text(payload?.branding?.footerText || 'Reporte generado por Eficentra', {
+        .text(payload?.branding?.footerText || 'Reporte generado por Eficentra', doc.page.margins.left, doc.y, {
             width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
             align: 'left'
         });
+
+    resetCursor(doc);
 }
 
 function sectionTitle(doc, title) {
-    ensureSpace(doc, 70);
+    resetCursor(doc);
+    ensureSpace(doc, 90);
+    resetCursor(doc);
 
     doc.moveDown(0.5);
+    resetCursor(doc);
+
     doc.fontSize(16)
         .fillColor('#0B2239')
-        .text(title);
+        .text(title, doc.page.margins.left, doc.y, {
+            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            align: 'left',
+            lineBreak: false
+        });
 
-    doc.moveTo(doc.page.margins.left, doc.y + 4)
-        .lineTo(doc.page.width - doc.page.margins.right, doc.y + 4)
+    const lineY = doc.y + 6;
+
+    doc.moveTo(doc.page.margins.left, lineY)
+        .lineTo(doc.page.width - doc.page.margins.right, lineY)
         .strokeColor('#DCE6EF')
         .stroke();
 
-    doc.moveDown();
+    doc.y = lineY + 12;
+    resetCursor(doc);
     doc.strokeColor('#000000');
 }
 
 function ensureSpace(doc, neededHeight) {
     if (doc.y + neededHeight > doc.page.height - doc.page.margins.bottom) {
         doc.addPage();
+        resetCursor(doc);
     }
 }
 
@@ -624,6 +648,10 @@ function formatIsoDate(value) {
     } catch (e) {
         return value;
     }
+}
+
+function resetCursor(doc) {
+    doc.x = doc.page.margins.left;
 }
 
 function formatShortDate(value) {

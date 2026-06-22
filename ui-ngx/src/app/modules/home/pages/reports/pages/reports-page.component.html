@@ -68,7 +68,7 @@
       <span>{{ 'reports.generated_reports_hint' | translate }}</span>
     </div>
 
-    <table mat-table [dataSource]="successfulExecutions" class="full-width-table">
+    <table mat-table [dataSource]="successfulExecutions()" class="full-width-table">
 
       <ng-container matColumnDef="templateNameSnapshot">
         <th mat-header-cell *matHeaderCellDef>{{ 'reports.report' | translate }}</th>

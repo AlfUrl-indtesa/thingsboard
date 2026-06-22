@@ -4,90 +4,107 @@
 
 <div mat-dialog-content [formGroup]="form" class="dialog-content">
 
-  <mat-form-field appearance="outline">
-    <mat-label>{{ 'reports.name' | translate }}</mat-label>
-    <input matInput formControlName="name">
-  </mat-form-field>
+  <div class="dialog-section">
+    <h3>{{ 'reports.basic_info' | translate }}</h3>
 
-  <mat-form-field appearance="outline">
-    <mat-label>{{ 'reports.description' | translate }}</mat-label>
-    <textarea matInput formControlName="description"></textarea>
-  </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reports.name' | translate }}</mat-label>
+      <input matInput formControlName="name">
+    </mat-form-field>
 
-  <mat-form-field appearance="outline">
-    <mat-label>{{ 'reports.type' | translate }}</mat-label>
-    <mat-select formControlName="type">
-      <mat-option value="EXECUTIVE">{{ 'reports.type_executive' | translate }}</mat-option>
-      <mat-option value="OPERATIONAL">{{ 'reports.type_operational' | translate }}</mat-option>
-      <mat-option value="COMPRESSED_AIR">{{ 'reports.type_compressed_air' | translate }}</mat-option>
-      <mat-option value="CUSTOM">{{ 'reports.type_custom' | translate }}</mat-option>
-    </mat-select>
-  </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reports.description' | translate }}</mat-label>
+      <textarea matInput rows="3" formControlName="description"></textarea>
+    </mat-form-field>
 
-  <mat-form-field appearance="outline">
-    <mat-label>{{ 'reports.status' | translate }}</mat-label>
-    <mat-select formControlName="status">
-      <mat-option value="DRAFT">{{ 'reports.status_draft' | translate }}</mat-option>
-      <mat-option value="ACTIVE">{{ 'reports.status_active' | translate }}</mat-option>
-      <mat-option value="DISABLED">{{ 'reports.status_disabled' | translate }}</mat-option>
-      <mat-option value="ARCHIVED">{{ 'reports.status_archived' | translate }}</mat-option>
-    </mat-select>
-  </mat-form-field>
+    <div class="two-columns">
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'reports.type' | translate }}</mat-label>
+        <mat-select formControlName="type">
+          <mat-option value="EXECUTIVE">{{ 'reports.type_executive' | translate }}</mat-option>
+          <mat-option value="OPERATIONAL">{{ 'reports.type_operational' | translate }}</mat-option>
+          <mat-option value="COMPRESSED_AIR">{{ 'reports.type_compressed_air' | translate }}</mat-option>
+          <mat-option value="CUSTOM">{{ 'reports.type_custom' | translate }}</mat-option>
+        </mat-select>
+      </mat-form-field>
 
-  <mat-form-field appearance="outline">
-    <mat-label>{{ 'reports.entity_type' | translate }}</mat-label>
-    <mat-select formControlName="entityType">
-      <mat-option value="DEVICE">{{ 'entity.type-device' | translate }}</mat-option>
-      <mat-option value="ASSET">{{ 'entity.type-asset' | translate }}</mat-option>
-    </mat-select>
-  </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'reports.status' | translate }}</mat-label>
+        <mat-select formControlName="status">
+          <mat-option value="DRAFT">{{ 'reports.status_draft' | translate }}</mat-option>
+          <mat-option value="ACTIVE">{{ 'reports.status_active' | translate }}</mat-option>
+          <mat-option value="DISABLED">{{ 'reports.status_disabled' | translate }}</mat-option>
+          <mat-option value="ARCHIVED">{{ 'reports.status_archived' | translate }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+  </div>
 
-  <mat-form-field appearance="outline">
-    <mat-label>{{ 'reports.company_name' | translate }}</mat-label>
-    <input matInput formControlName="companyName">
-  </mat-form-field>
+  <div class="dialog-section">
+    <h3>{{ 'reports.data_scope' | translate }}</h3>
 
-  <mat-form-field appearance="outline">
-    <mat-label>{{ 'reports.footer' | translate }}</mat-label>
-    <input matInput formControlName="footerText">
-  </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reports.entity_type' | translate }}</mat-label>
+      <mat-select formControlName="entityType">
+        <mat-option value="DEVICE">{{ 'entity.type-device' | translate }}</mat-option>
+        <mat-option value="ASSET">{{ 'entity.type-asset' | translate }}</mat-option>
+      </mat-select>
+    </mat-form-field>
 
-  <mat-form-field appearance="outline" class="full-width">
-  <mat-label>{{ 'reports.entities' | translate }}</mat-label>
-  <mat-select formControlName="selectedEntityIds" multiple>
-    <mat-option *ngIf="loadingEntities" disabled>
-      {{ 'reports.loading_entities' | translate }}
-    </mat-option>
-    <mat-option *ngFor="let entity of entities" [value]="entity.id">
-      {{ entity.label || entity.name }}
-      <span *ngIf="entity.type"> — {{ entity.type }}</span>
-    </mat-option>
-  </mat-select>
-  <mat-hint>{{ 'reports.entities_hint' | translate }}</mat-hint>
-</mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reports.entities' | translate }}</mat-label>
+      <mat-select formControlName="selectedEntityIds" multiple>
+        <mat-option *ngIf="loadingEntities" disabled>
+          {{ 'reports.loading_entities' | translate }}
+        </mat-option>
 
-<mat-form-field appearance="outline" class="full-width">
-  <mat-label>{{ 'reports.telemetry_keys' | translate }}</mat-label>
-  <mat-select formControlName="selectedKeys" multiple>
-    <mat-option *ngIf="loadingKeys" disabled>
-      {{ 'reports.loading_keys' | translate }}
-    </mat-option>
+        <mat-option *ngFor="let entity of entities" [value]="entity.id">
+          {{ entity.label || entity.name }}
+          <span *ngIf="entity.type"> — {{ entity.type }}</span>
+        </mat-option>
+      </mat-select>
+      <mat-hint>{{ 'reports.entities_hint' | translate }}</mat-hint>
+    </mat-form-field>
 
-    <mat-option *ngIf="!loadingKeys && telemetryKeys.length === 0" disabled>
-      {{ 'reports.no_telemetry_keys' | translate }}
-    </mat-option>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reports.telemetry_keys' | translate }}</mat-label>
+      <mat-select formControlName="selectedKeys" multiple>
+        <mat-option *ngIf="loadingKeys" disabled>
+          {{ 'reports.loading_keys' | translate }}
+        </mat-option>
 
-    <mat-option *ngFor="let key of telemetryKeys" [value]="key">
-      {{ key }}
-    </mat-option>
-  </mat-select>
+        <mat-option *ngIf="!loadingKeys && telemetryKeys.length === 0" disabled>
+          {{ 'reports.no_telemetry_keys' | translate }}
+        </mat-option>
 
-  <mat-hint>{{ 'reports.telemetry_keys_hint' | translate }}</mat-hint>
+        <mat-option *ngFor="let key of telemetryKeys" [value]="key">
+          {{ key }}
+        </mat-option>
+      </mat-select>
 
-  <mat-error *ngIf="form.get('selectedKeys')?.hasError('required')">
-    {{ 'reports.telemetry_keys_required' | translate }}
-  </mat-error>
-</mat-form-field>
+      <mat-hint>{{ 'reports.telemetry_keys_hint' | translate }}</mat-hint>
+
+      <mat-error *ngIf="form.get('selectedKeys')?.hasError('required')">
+        {{ 'reports.telemetry_keys_required' | translate }}
+      </mat-error>
+    </mat-form-field>
+  </div>
+
+  <div class="dialog-section">
+    <h3>{{ 'reports.branding' | translate }}</h3>
+
+    <div class="two-columns">
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'reports.company_name' | translate }}</mat-label>
+        <input matInput formControlName="companyName">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'reports.footer' | translate }}</mat-label>
+        <input matInput formControlName="footerText">
+      </mat-form-field>
+    </div>
+  </div>
 
 </div>
 
@@ -95,6 +112,7 @@
   <button mat-button (click)="close()">
     {{ 'action.cancel' | translate }}
   </button>
+
   <button mat-raised-button color="primary" (click)="save()">
     {{ 'action.save' | translate }}
   </button>

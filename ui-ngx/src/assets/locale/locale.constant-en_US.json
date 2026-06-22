@@ -126,7 +126,10 @@
         "create_report": "Create report",
         "update_report": "Update report",
         "report_history": "Report history",
-        "page_subtitle": "Configure, generate and download technical reports from a single screen."
+        "page_subtitle": "Configure, generate and download technical reports from a single screen.",
+        "failed_reports": "Failed attempts",
+        "failed_reports_hint": "Reports that were not generated correctly are stored here.",
+        "error": "Error"
     },
     "action": {
         "activate": "Activate",

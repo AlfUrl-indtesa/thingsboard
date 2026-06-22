@@ -15,6 +15,13 @@ import { GenerateReportDialogComponent } from "../components/generate-report-dia
 export class ReportsPageComponent implements OnInit {
   displayedColumns = ["name", "type", "status", "actions"];
   executionDisplayedColumns = ["status", "fileName", "createdTime", "actions"];
+  failedExecutionDisplayedColumns = [
+    "templateNameSnapshot",
+    "status",
+    "createdTime",
+    "errorMessage",
+    "actions",
+  ];
 
   templates: ReportTemplate[] = [];
   executions: any[] = [];
@@ -54,6 +61,32 @@ export class ReportsPageComponent implements OnInit {
       .subscribe((pageData) => {
         this.executions = pageData.data || pageData.content || [];
       });
+  }
+
+  successfulExecutions(): any[] {
+    return this.executions.filter((execution) =>
+      this.isSuccessfulExecution(execution)
+    );
+  }
+
+  failedOrPendingExecutions(): any[] {
+    return this.executions.filter((execution) =>
+      !this.isSuccessfulExecution(execution)
+    );
+  }
+
+  private isSuccessfulExecution(execution: any): boolean {
+    return execution?.status === "SUCCESS" && !!execution?.fileName;
+  }
+
+  successfulExecutionsForTemplate(template: ReportTemplate): any[] {
+    return this.executionsForTemplate(template)
+      .filter((execution) => this.isSuccessfulExecution(execution));
+  }
+
+  failedExecutionsForTemplate(template: ReportTemplate): any[] {
+    return this.executionsForTemplate(template)
+      .filter((execution) => !this.isSuccessfulExecution(execution));
   }
 
   openCreateDialog(): void {

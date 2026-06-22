@@ -68,7 +68,7 @@
       <span>{{ 'reports.generated_reports_hint' | translate }}</span>
     </div>
 
-    <table mat-table [dataSource]="executions" class="full-width-table">
+    <table mat-table [dataSource]="successfulExecutionsForTemplate(template)" class="full-width-table">
 
       <ng-container matColumnDef="templateNameSnapshot">
         <th mat-header-cell *matHeaderCellDef>{{ 'reports.report' | translate }}</th>
@@ -108,6 +108,51 @@
 
       <tr mat-header-row *matHeaderRowDef="executionDisplayedColumns"></tr>
       <tr mat-row *matRowDef="let row; columns: executionDisplayedColumns;"></tr>
+    </table>
+  </section>
+  <section class="report-card failed-reports-card" *ngIf="failedOrPendingExecutions().length">
+    <div class="section-header">
+      <h3>{{ 'reports.failed_reports' | translate }}</h3>
+      <span>{{ 'reports.failed_reports_hint' | translate }}</span>
+    </div>
+
+    <table mat-table [dataSource]="failedOrPendingExecutions()" class="full-width-table">
+
+      <ng-container matColumnDef="templateNameSnapshot">
+        <th mat-header-cell *matHeaderCellDef>{{ 'reports.report' | translate }}</th>
+        <td mat-cell *matCellDef="let execution">{{ execution.templateNameSnapshot }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>{{ 'reports.status' | translate }}</th>
+        <td mat-cell *matCellDef="let execution">{{ execution.status }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="createdTime">
+        <th mat-header-cell *matHeaderCellDef>{{ 'reports.created_time' | translate }}</th>
+        <td mat-cell *matCellDef="let execution">
+          {{ execution.createdTime || execution.requestedTime | date:'medium' }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="errorMessage">
+        <th mat-header-cell *matHeaderCellDef>{{ 'reports.error' | translate }}</th>
+        <td mat-cell *matCellDef="let execution">
+          {{ execution.errorMessage || '-' }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>{{ 'reports.actions' | translate }}</th>
+        <td mat-cell *matCellDef="let execution">
+          <button mat-button color="warn" (click)="deleteExecution(execution)">
+            {{ 'reports.delete_generated_report' | translate }}
+          </button>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="failedExecutionDisplayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: failedExecutionDisplayedColumns;"></tr>
     </table>
   </section>
 

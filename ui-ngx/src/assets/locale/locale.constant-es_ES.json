@@ -126,7 +126,10 @@
     "create_report": "Crear reporte",
     "update_report": "Actualizar reporte",
     "report_history": "Historial de reportes",
-    "page_subtitle": "Configura, genera y descarga reportes técnicos desde una sola pantalla."
+    "page_subtitle": "Configura, genera y descarga reportes técnicos desde una sola pantalla.",
+    "failed_reports": "Intentos fallidos",
+    "failed_reports_hint": "Aquí se guardan los reportes que no se generaron correctamente.",
+    "error": "Error"
   },
   "action": {
     "activate": "Activar",

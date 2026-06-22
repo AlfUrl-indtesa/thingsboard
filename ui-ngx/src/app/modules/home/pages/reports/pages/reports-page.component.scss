@@ -82,3 +82,16 @@
     width: 100%;
   }
 }
+
+.failed-reports-card,
+.failed-executions {
+  margin-top: 16px;
+  opacity: 0.92;
+}
+
+.failed-executions h4 {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.75;
+}

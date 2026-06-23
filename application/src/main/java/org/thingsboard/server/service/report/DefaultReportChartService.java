@@ -13,6 +13,7 @@ import org.thingsboard.server.common.data.report.ReportTargetEntity;
 import org.thingsboard.server.common.data.report.ReportTelemetryQuery;
 import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.common.data.report.ReportTimeSeries;
+import org.thingsboard.server.common.data.report.ReportVariableMetadata;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,11 +24,12 @@ public class DefaultReportChartService implements ReportChartService {
 
     private final ReportTelemetryService reportTelemetryService;
     private final ObjectMapper objectMapper;
+    private final ReportVariableMetadataService variableMetadataService;
 
     @Override
     public List<ReportTimeSeries> buildTimeSeries(ReportTemplate template,
-                                                  GenerateReportRequest request,
-                                                  List<ReportTargetEntity> entities) {
+            GenerateReportRequest request,
+            List<ReportTargetEntity> entities) {
         List<ReportTimeSeries> result = new ArrayList<>();
 
         if (template == null || template.getSections() == null || template.getSections().isEmpty()) {
@@ -56,9 +58,9 @@ public class DefaultReportChartService implements ReportChartService {
     }
 
     private List<ReportTimeSeries> buildSeriesForQuery(TenantId tenantId,
-                                                       GenerateReportRequest request,
-                                                       List<ReportTargetEntity> entities,
-                                                       ReportChartQuery query) {
+            GenerateReportRequest request,
+            List<ReportTargetEntity> entities,
+            ReportChartQuery query) {
         List<ReportTimeSeries> result = new ArrayList<>();
 
         if (entities == null || entities.isEmpty()) {
@@ -78,11 +80,16 @@ public class DefaultReportChartService implements ReportChartService {
     }
 
     private ReportTelemetryQuery buildTelemetryQuery(ReportChartQuery query,
-                                                     GenerateReportRequest request) {
+            GenerateReportRequest request) {
+        ReportVariableMetadata metadata = variableMetadataService.resolve(
+                query.getKey(),
+                query.getLabel(),
+                query.getUnit());
+
         ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
         telemetryQuery.setKey(query.getKey());
-        telemetryQuery.setLabel(query.getLabel());
-        telemetryQuery.setUnit(query.getUnit());
+        telemetryQuery.setLabel(metadata.getLabel());
+        telemetryQuery.setUnit(metadata.getUnit());
         telemetryQuery.setStartTs(request.getStartTs());
         telemetryQuery.setEndTs(request.getEndTs());
         telemetryQuery.setAggregation(query.getAggregation());

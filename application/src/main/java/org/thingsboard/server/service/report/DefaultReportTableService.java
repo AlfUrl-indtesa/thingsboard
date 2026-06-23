@@ -17,6 +17,7 @@ import org.thingsboard.server.common.data.report.ReportTargetEntity;
 import org.thingsboard.server.common.data.report.ReportTelemetryQuery;
 import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.common.data.report.ReportTimeSeries;
+import org.thingsboard.server.common.data.report.ReportVariableMetadata;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -33,11 +34,12 @@ public class DefaultReportTableService implements ReportTableService {
     private final ReportTelemetryService reportTelemetryService;
     private final ReportKpiCalculationSupport calculationSupport;
     private final ObjectMapper objectMapper;
+    private final ReportVariableMetadataService variableMetadataService;
 
     @Override
     public List<ReportTable> buildTables(ReportTemplate template,
-                                         GenerateReportRequest request,
-                                         List<ReportTargetEntity> entities) {
+            GenerateReportRequest request,
+            List<ReportTargetEntity> entities) {
         List<ReportTable> result = new ArrayList<>();
 
         if (template == null || template.getSections() == null || template.getSections().isEmpty()) {
@@ -66,10 +68,10 @@ public class DefaultReportTableService implements ReportTableService {
     }
 
     private ReportTable buildTableForSection(TenantId tenantId,
-                                             GenerateReportRequest request,
-                                             List<ReportTargetEntity> entities,
-                                             ReportSectionConfig section,
-                                             List<ReportTableQuery> queries) {
+            GenerateReportRequest request,
+            List<ReportTargetEntity> entities,
+            ReportSectionConfig section,
+            List<ReportTableQuery> queries) {
         if (entities == null || entities.isEmpty()) {
             return null;
         }
@@ -95,7 +97,17 @@ public class DefaultReportTableService implements ReportTableService {
         for (ReportTableQuery query : queries) {
             ReportTableColumn column = new ReportTableColumn();
             column.setKey(resolveColumnKey(query));
-            column.setLabel(query.getLabel());
+            ReportVariableMetadata metadata = variableMetadataService.resolve(
+                    query.getKey(),
+                    query.getLabel(),
+                    query.getUnit());
+
+            String label = metadata.getLabel();
+            if (metadata.getUnit() != null && !metadata.getUnit().isBlank()) {
+                label = label + " (" + metadata.getUnit() + ")";
+            }
+
+            column.setLabel(label);
             column.setAlign(query.getAlign() != null ? query.getAlign() : "right");
             columns.add(column);
         }
@@ -104,9 +116,9 @@ public class DefaultReportTableService implements ReportTableService {
     }
 
     private List<Map<String, Object>> buildRows(TenantId tenantId,
-                                                GenerateReportRequest request,
-                                                List<ReportTargetEntity> entities,
-                                                List<ReportTableQuery> queries) {
+            GenerateReportRequest request,
+            List<ReportTargetEntity> entities,
+            List<ReportTableQuery> queries) {
         List<Map<String, Object>> rows = new ArrayList<>();
 
         for (ReportTargetEntity entity : entities) {
@@ -120,8 +132,13 @@ public class DefaultReportTableService implements ReportTableService {
                 Double value = calculationSupport.calculate(series.getPoints(), query.getAggregation());
                 String formattedValue = value != null ? calculationSupport.format(value) : null;
 
-                if (formattedValue != null && query.getUnit() != null && !query.getUnit().isBlank()) {
-                    formattedValue = formattedValue + " " + query.getUnit();
+                ReportVariableMetadata metadata = variableMetadataService.resolve(
+                        query.getKey(),
+                        query.getLabel(),
+                        query.getUnit());
+
+                if (formattedValue != null && metadata.getUnit() != null && !metadata.getUnit().isBlank()) {
+                    formattedValue = formattedValue + " " + metadata.getUnit();
                 }
 
                 row.put(resolveColumnKey(query), formattedValue);
@@ -134,11 +151,16 @@ public class DefaultReportTableService implements ReportTableService {
     }
 
     private ReportTelemetryQuery buildTelemetryQuery(ReportTableQuery query,
-                                                     GenerateReportRequest request) {
+            GenerateReportRequest request) {
+        ReportVariableMetadata metadata = variableMetadataService.resolve(
+                query.getKey(),
+                query.getLabel(),
+                query.getUnit());
+
         ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
         telemetryQuery.setKey(query.getKey());
-        telemetryQuery.setLabel(query.getLabel());
-        telemetryQuery.setUnit(query.getUnit());
+        telemetryQuery.setLabel(metadata.getLabel());
+        telemetryQuery.setUnit(metadata.getUnit());
         telemetryQuery.setStartTs(request.getStartTs());
         telemetryQuery.setEndTs(request.getEndTs());
         telemetryQuery.setAggregation(mapTelemetryAggregation(query.getAggregation()));

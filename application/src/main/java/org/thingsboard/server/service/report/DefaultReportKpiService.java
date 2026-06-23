@@ -17,6 +17,7 @@ public class DefaultReportKpiService implements ReportKpiService {
     private final ReportTelemetryService reportTelemetryService;
     private final ReportKpiCalculationSupport calculationSupport;
     private final ObjectMapper objectMapper;
+    private final ReportVariableMetadataService variableMetadataService;
 
     @Override
     public List<ReportKpi> buildKpis(ReportTemplate template,
@@ -59,6 +60,11 @@ public class DefaultReportKpiService implements ReportKpiService {
             GenerateReportRequest request,
             List<ReportTargetEntity> entities,
             ReportKpiQuery query) {
+
+        ReportVariableMetadata metadata = variableMetadataService.resolve(
+                query.getKey(),
+                query.getLabel(),
+                query.getUnit());
         List<ReportKpi> result = new ArrayList<>();
 
         for (ReportTargetEntity entity : entities) {
@@ -72,10 +78,10 @@ public class DefaultReportKpiService implements ReportKpiService {
 
             ReportKpi kpi = new ReportKpi();
             kpi.setKey(query.getKey());
-            kpi.setLabel(query.getLabel() + " - " + entity.getName());
+            kpi.setLabel(metadata.getLabel() + " - " + entity.getName());
+            kpi.setUnit(metadata.getUnit());
             kpi.setValue(value);
             kpi.setFormattedValue(calculationSupport.format(value));
-            kpi.setUnit(query.getUnit());
             kpi.setStatus(query.getStatus());
 
             result.add(kpi);
@@ -98,6 +104,11 @@ public class DefaultReportKpiService implements ReportKpiService {
             }
         }
 
+        ReportVariableMetadata metadata = variableMetadataService.resolve(
+                query.getKey(),
+                query.getLabel(),
+                query.getUnit());
+
         Double value = calculationSupport.calculate(allPoints, query.getAggregation());
         if (value == null) {
             return null;
@@ -105,10 +116,10 @@ public class DefaultReportKpiService implements ReportKpiService {
 
         ReportKpi kpi = new ReportKpi();
         kpi.setKey(query.getKey());
-        kpi.setLabel(query.getLabel());
+        kpi.setLabel(metadata.getLabel());
+        kpi.setUnit(metadata.getUnit());
         kpi.setValue(value);
         kpi.setFormattedValue(calculationSupport.format(value));
-        kpi.setUnit(query.getUnit());
         kpi.setStatus(query.getStatus());
 
         return kpi;
@@ -116,10 +127,15 @@ public class DefaultReportKpiService implements ReportKpiService {
 
     private ReportTelemetryQuery buildTelemetryQuery(ReportKpiQuery query,
             GenerateReportRequest request) {
+        ReportVariableMetadata metadata = variableMetadataService.resolve(
+                query.getKey(),
+                query.getLabel(),
+                query.getUnit());
+
         ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
         telemetryQuery.setKey(query.getKey());
-        telemetryQuery.setLabel(query.getLabel());
-        telemetryQuery.setUnit(query.getUnit());
+        telemetryQuery.setLabel(metadata.getLabel());
+        telemetryQuery.setUnit(metadata.getUnit());
         telemetryQuery.setStartTs(request.getStartTs());
         telemetryQuery.setEndTs(request.getEndTs());
         telemetryQuery.setAggregation(ReportAggregationType.NONE);

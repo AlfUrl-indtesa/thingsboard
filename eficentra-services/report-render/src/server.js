@@ -37,6 +37,7 @@ app.post('/render-report', (req, res) => {
 
         renderCover(doc, payload);
         renderExecutiveSummary(doc, payload);
+        renderDataQuality(doc, payload);
         renderKpis(doc, payload);
         renderStatisticsTables(doc, payload);
         renderCharts(doc, payload);
@@ -123,6 +124,147 @@ function renderExecutiveSummary(doc, payload) {
     }
 
     doc.moveDown();
+}
+
+function renderDataQuality(doc, payload) {
+    const summary = buildDataQualitySummary(payload);
+
+    if (!summary) {
+        return;
+    }
+
+    ensureSpace(doc, 170);
+    resetCursor(doc);
+    sectionTitle(doc, 'Calidad de datos');
+
+    const rows = [
+        ['Entidades analizadas', summary.entityCount],
+        ['Variables analizadas', summary.variableCount],
+        ['Muestras procesadas', summary.totalSamples],
+        ['Variables sin datos', summary.emptySeriesCount],
+        ['Cobertura estimada', summary.coverageLabel]
+    ];
+
+    renderKeyValueTable(doc, rows);
+
+    doc.moveDown(0.6);
+    resetCursor(doc);
+
+    doc.fontSize(8)
+        .fillColor('#555555')
+        .text(summary.message, doc.page.margins.left, doc.y, {
+            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            align: 'left',
+            lineGap: 2
+        });
+
+    doc.moveDown(1);
+    resetCursor(doc);
+}
+
+function buildDataQualitySummary(payload) {
+    const entities = payload?.context?.entities || payload?.data?.entities || [];
+    const series = payload?.data?.timeSeries || [];
+
+    if (!series.length) {
+        return {
+            entityCount: entities.length,
+            variableCount: 0,
+            totalSamples: 0,
+            emptySeriesCount: 0,
+            coverageLabel: 'Sin datos',
+            message: 'No se encontraron series de telemetría para el periodo seleccionado.'
+        };
+    }
+
+    let totalSamples = 0;
+    let emptySeriesCount = 0;
+    const variableKeys = new Set();
+
+    series.forEach(item => {
+        const points = item?.points || [];
+        totalSamples += points.length;
+
+        if (!points.length) {
+            emptySeriesCount++;
+        }
+
+        if (item?.key) {
+            variableKeys.add(item.key);
+        }
+    });
+
+    const averageSamples = series.length ? totalSamples / series.length : 0;
+
+    let coverageLabel = 'Baja';
+
+    if (averageSamples >= 100) {
+        coverageLabel = 'Alta';
+    } else if (averageSamples >= 20) {
+        coverageLabel = 'Media';
+    }
+
+    let message = 'La cobertura de datos permite realizar una revisión general del comportamiento operativo del periodo seleccionado.';
+
+    if (coverageLabel === 'Alta') {
+        message = 'La cobertura de datos es alta. El periodo analizado cuenta con suficiente densidad de muestras para evaluar tendencias y variaciones operativas.';
+    } else if (coverageLabel === 'Media') {
+        message = 'La cobertura de datos es media. El reporte permite observar el comportamiento general, aunque podrían existir intervalos con menor densidad de muestras.';
+    } else {
+        message = 'La cobertura de datos es baja. Se recomienda revisar la frecuencia de envío de telemetría o el rango de tiempo seleccionado.';
+    }
+
+    if (emptySeriesCount > 0) {
+        message += ` Se detectaron ${emptySeriesCount} variable(s) sin datos en el periodo.`;
+    }
+
+    return {
+        entityCount: entities.length,
+        variableCount: variableKeys.size || series.length,
+        totalSamples,
+        emptySeriesCount,
+        coverageLabel,
+        message
+    };
+}
+
+function renderKeyValueTable(doc, rows) {
+    const startX = doc.page.margins.left;
+    const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const labelWidth = tableWidth * 0.55;
+    const valueWidth = tableWidth * 0.45;
+    const rowHeight = 22;
+
+    ensureSpace(doc, rows.length * rowHeight + 30);
+    resetCursor(doc);
+
+    let y = doc.y;
+
+    rows.forEach((row, index) => {
+        const fill = index % 2 === 0 ? '#FFFFFF' : '#F5F8FB';
+
+        doc.rect(startX, y, tableWidth, rowHeight).fill(fill);
+
+        doc.fillColor('#333333')
+            .fontSize(8)
+            .text(String(row[0]), startX + 6, y + 7, {
+                width: labelWidth - 12,
+                lineBreak: false
+            });
+
+        doc.fillColor('#111111')
+            .fontSize(8)
+            .text(String(row[1]), startX + labelWidth + 6, y + 7, {
+                width: valueWidth - 12,
+                align: 'right',
+                lineBreak: false
+            });
+
+        y += rowHeight;
+    });
+
+    doc.y = y + 12;
+    resetCursor(doc);
 }
 
 function renderKpis(doc, payload) {
@@ -544,7 +686,13 @@ function cleanObservation(text, payload) {
 }
 
 function renderObservations(doc, payload) {
-    const observations = payload?.summary?.observations || payload?.data?.observations || [];
+    const manualObservations = payload?.summary?.observations || payload?.data?.observations || [];
+    const automaticObservations = buildAutomaticObservations(payload);
+
+    const observations = [
+        ...manualObservations,
+        ...automaticObservations
+    ];
 
     if (!observations.length) {
         return;
@@ -574,6 +722,58 @@ function renderObservations(doc, payload) {
     });
 }
 
+function buildAutomaticObservations(payload) {
+    const observations = [];
+    const series = payload?.data?.timeSeries || [];
+
+    series.forEach(item => {
+        const points = (item.points || [])
+            .filter(point => point && Number.isFinite(Number(point.value)))
+            .map(point => ({
+                ts: Number(point.ts),
+                value: Number(point.value)
+            }));
+
+        const label = item.label || item.key || 'Variable';
+        const unit = item.unit ? ` ${item.unit}` : '';
+        const entityName = item.entityName || 'la entidad seleccionada';
+
+        if (!points.length) {
+            observations.push(`La variable ${label} no presentó datos en el periodo seleccionado para ${entityName}.`);
+            return;
+        }
+
+        const values = points.map(point => point.value);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+
+        observations.push(
+            `La variable ${label} registró ${points.length} muestra(s) para ${entityName}. ` +
+            `Promedio: ${formatNumber(avg)}${unit}, mínimo: ${formatNumber(min)}${unit}, máximo: ${formatNumber(max)}${unit}.`
+        );
+
+        if (points.length < 20) {
+            observations.push(
+                `La variable ${label} tiene baja cantidad de muestras. Conviene revisar la frecuencia de envío o ampliar el periodo analizado.`
+            );
+        }
+
+        if (avg !== 0 && Math.abs(max - avg) / Math.abs(avg) > 0.25) {
+            observations.push(
+                `La variable ${label} presentó picos relevantes respecto a su promedio.`
+            );
+        }
+
+        if (avg !== 0 && Math.abs(avg - min) / Math.abs(avg) > 0.25) {
+            observations.push(
+                `La variable ${label} presentó caídas relevantes respecto a su promedio.`
+            );
+        }
+    });
+
+    return observations;
+}
 function renderConclusion(doc, payload) {
     ensureSpace(doc, 170);
     resetCursor(doc);

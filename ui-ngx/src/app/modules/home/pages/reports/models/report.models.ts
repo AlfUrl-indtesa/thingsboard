@@ -123,6 +123,37 @@ export interface ReportSelectableEntity {
   };
 }
 
+export type ReportChartGranularity = "FULL" | "DAY" | "WEEK" | "MONTH";
+
+export interface ReportVariableStatsConfig {
+  min: boolean;
+  max: boolean;
+  avg: boolean;
+  count: boolean;
+  sum: boolean;
+  first: boolean;
+  last: boolean;
+  delta: boolean;
+}
+
+export interface ReportVariableConfig {
+  entityId: {
+    entityType: string;
+    id: string;
+  };
+  entityName?: string;
+  key: string;
+  enabled: boolean;
+  label: string;
+  unit?: string;
+  scale: number;
+  offset: number;
+  chartEnabled: boolean;
+  tableEnabled: boolean;
+  granularity: ReportChartGranularity;
+  stats: ReportVariableStatsConfig;
+}
+
 export interface PageData<T> {
   data: T[];
   totalPages: number;

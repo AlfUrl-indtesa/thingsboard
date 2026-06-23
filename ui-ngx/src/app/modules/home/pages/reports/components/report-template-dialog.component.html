@@ -66,28 +66,107 @@
       <mat-hint>{{ 'reports.entities_hint' | translate }}</mat-hint>
     </mat-form-field>
 
-    <mat-form-field appearance="outline">
-      <mat-label>{{ 'reports.telemetry_keys' | translate }}</mat-label>
-      <mat-select formControlName="selectedKeys" multiple>
-        <mat-option *ngIf="loadingKeys" disabled>
-          {{ 'reports.loading_keys' | translate }}
-        </mat-option>
+    <div class="variable-config-wrapper">
+      <h3>{{ 'reports.variable_configuration' | translate }}</h3>
 
-        <mat-option *ngIf="!loadingKeys && telemetryKeys.length === 0" disabled>
-          {{ 'reports.no_telemetry_keys' | translate }}
-        </mat-option>
+      <div *ngIf="!form.getRawValue().selectedEntityIds?.length" class="empty-state">
+        {{ 'reports.select_entities_first' | translate }}
+      </div>
 
-        <mat-option *ngFor="let key of telemetryKeys" [value]="key">
-          {{ key }}
-        </mat-option>
-      </mat-select>
+      <div class="entity-variable-card" *ngFor="let entityId of form.getRawValue().selectedEntityIds">
 
-      <mat-hint>{{ 'reports.telemetry_keys_hint' | translate }}</mat-hint>
+        <div class="entity-variable-header">
+          <strong>{{ displayEntity(entityId) }}</strong>
+          <span *ngIf="loadingKeysByEntityId[entityId.entityType + ':' + entityId.id]">
+            {{ 'reports.loading_keys' | translate }}
+          </span>
+        </div>
+
+        <div class="variable-row" *ngFor="let variable of variablesForEntity(entityId)">
+
+          <div class="variable-row-main">
+            <label class="native-checkbox">
+              <input type="checkbox" [checked]="variable.enabled" (change)="onVariableEnabledChanged(variable, $event)">
+              {{ variable.key }}
+            </label>
+          </div>
+
+          <div class="variable-grid" *ngIf="variable.enabled">
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'reports.print_label' | translate }}</mat-label>
+              <input matInput [(ngModel)]="variable.label" [ngModelOptions]="{ standalone: true }">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'reports.unit' | translate }}</mat-label>
+              <input matInput [(ngModel)]="variable.unit" [ngModelOptions]="{ standalone: true }">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'reports.scale' | translate }}</mat-label>
+              <input matInput type="number" [(ngModel)]="variable.scale" [ngModelOptions]="{ standalone: true }">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'reports.offset' | translate }}</mat-label>
+              <input matInput type="number" [(ngModel)]="variable.offset" [ngModelOptions]="{ standalone: true }">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'reports.chart_granularity' | translate }}</mat-label>
+              <mat-select [(ngModel)]="variable.granularity" [ngModelOptions]="{ standalone: true }">
+                <mat-option value="FULL">{{ 'reports.granularity_full' | translate }}</mat-option>
+                <mat-option value="DAY">{{ 'reports.granularity_day' | translate }}</mat-option>
+                <mat-option value="WEEK">{{ 'reports.granularity_week' | translate }}</mat-option>
+                <mat-option value="MONTH">{{ 'reports.granularity_month' | translate }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div class="variable-options" *ngIf="variable.enabled">
+            <label>
+              <input type="checkbox" [checked]="variable.chartEnabled"
+                (change)="onVariableBooleanChanged(variable, 'chartEnabled', $event)">
+              {{ 'reports.include_chart' | translate }}
+            </label>
+
+            <label>
+              <input type="checkbox" [checked]="variable.tableEnabled"
+                (change)="onVariableBooleanChanged(variable, 'tableEnabled', $event)">
+              {{ 'reports.include_table' | translate }}
+            </label>
+
+            <label>
+              <input type="checkbox" [checked]="variable.stats.min"
+                (change)="onVariableStatChanged(variable, 'min', $event)">
+              {{ 'reports.stat_min' | translate }}
+            </label>
+
+            <label>
+              <input type="checkbox" [checked]="variable.stats.max"
+                (change)="onVariableStatChanged(variable, 'max', $event)">
+              {{ 'reports.stat_max' | translate }}
+            </label>
+
+            <label>
+              <input type="checkbox" [checked]="variable.stats.avg"
+                (change)="onVariableStatChanged(variable, 'avg', $event)">
+              {{ 'reports.stat_avg' | translate }}
+            </label>
+
+            <label>
+              <input type="checkbox" [checked]="variable.stats.count"
+                (change)="onVariableStatChanged(variable, 'count', $event)">
+              {{ 'reports.stat_count' | translate }}
+            </label>
+          </div>
+        </div>
+      </div>
 
       <mat-error *ngIf="form.get('selectedKeys')?.hasError('required')">
         {{ 'reports.telemetry_keys_required' | translate }}
       </mat-error>
-    </mat-form-field>
+    </div>
   </div>
 
   <div class="dialog-section">

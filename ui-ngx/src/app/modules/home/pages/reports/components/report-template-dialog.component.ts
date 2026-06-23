@@ -11,6 +11,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from "@angular/material/dialog";
 import {
   ReportSelectableEntity,
   ReportTemplate,
+  ReportVariableConfig,
 } from "../models/report.models";
 import { ReportService } from "../services/report.service";
 type ReportEntityType = "DEVICE" | "ASSET";
@@ -26,6 +27,8 @@ export class ReportTemplateDialogComponent implements OnInit {
   telemetryKeys: string[] = [];
   loadingEntities = false;
   loadingKeys = false;
+  variableConfigs: ReportVariableConfig[] = [];
+  loadingKeysByEntityId: Record<string, boolean> = {};
 
   form = this.fb.group({
     name: new FormControl<string>("", {
@@ -58,7 +61,6 @@ export class ReportTemplateDialogComponent implements OnInit {
     }),
     selectedKeys: new FormControl<string[]>([], {
       nonNullable: true,
-      validators: [Validators.required],
     }),
 
     companyName: new FormControl<string>("Eficentra", {
@@ -134,6 +136,23 @@ export class ReportTemplateDialogComponent implements OnInit {
       footerText: template.branding?.footerText ||
         "Reporte generado por Eficentra",
     });
+
+    this.variableConfigs = this.extractVariablesFromSections(
+      template.sections || [],
+    );
+
+    if (!this.variableConfigs.length) {
+      const keys = this.extractKeysFromSections(template.sections || []);
+      this.variableConfigs = [];
+
+      entityIds.forEach((entityId) => {
+        keys.forEach((key) => {
+          this.variableConfigs.push(this.buildVariableConfig(entityId, key));
+        });
+      });
+    }
+
+    this.syncSelectedKeysFromVariableConfigs();
   }
 
   loadEntities(textSearch = ""): void {
@@ -156,6 +175,7 @@ export class ReportTemplateDialogComponent implements OnInit {
   private onSelectedEntitiesChanged(entityIds: any[]): void {
     if (!entityIds.length) {
       this.telemetryKeys = [];
+      this.variableConfigs = [];
       this.form.patchValue({ selectedKeys: [] }, { emitEvent: false });
       return;
     }
@@ -166,48 +186,198 @@ export class ReportTemplateDialogComponent implements OnInit {
 
     if (!validEntityIds.length) {
       this.telemetryKeys = [];
+      this.variableConfigs = [];
       this.form.patchValue({ selectedKeys: [] }, { emitEvent: false });
       return;
     }
 
-    this.loadingKeys = true;
-
-    const requests = validEntityIds.map((entityId) =>
-      this.reportService.getSelectableEntityKeys(
-        entityId.entityType,
-        entityId.id,
-      ).pipe(
-        catchError(() => of([] as string[])),
-      )
+    const selectedUids = new Set(
+      validEntityIds.map((entityId) => this.entityUid(entityId)),
     );
 
-    forkJoin(requests).subscribe({
-      next: (results) => {
-        const uniqueKeys = new Set<string>();
+    this.variableConfigs = this.variableConfigs.filter((config) =>
+      selectedUids.has(this.entityUid(config.entityId))
+    );
 
-        results.forEach((keys) => {
-          (keys || []).forEach((key) => uniqueKeys.add(key));
-        });
+    validEntityIds.forEach((entityId) => {
+      this.loadKeysForEntity(entityId);
+    });
 
-        this.telemetryKeys = Array.from(uniqueKeys).sort();
+    this.syncSelectedKeysFromVariableConfigs();
+  }
 
-        const selectedKeys = this.form.getRawValue().selectedKeys || [];
-        const stillAvailableKeys = selectedKeys.filter((key) =>
-          uniqueKeys.has(key)
+  private loadKeysForEntity(entityId: any): void {
+    const uid = this.entityUid(entityId);
+
+    if (!uid) {
+      return;
+    }
+
+    this.loadingKeysByEntityId[uid] = true;
+    this.loadingKeys = true;
+
+    this.reportService.getSelectableEntityKeys(entityId.entityType, entityId.id)
+      .pipe(catchError(() => of([] as string[])))
+      .subscribe((keys) => {
+        const existingKeys = new Set(
+          this.variableConfigs
+            .filter((config) => this.entityUid(config.entityId) === uid)
+            .map((config) => config.key),
         );
 
-        this.form.patchValue({
-          selectedKeys: stillAvailableKeys,
-        }, { emitEvent: false });
+        (keys || []).forEach((key) => {
+          if (!existingKeys.has(key)) {
+            this.variableConfigs.push(this.buildVariableConfig(entityId, key));
+          }
+        });
 
-        this.loadingKeys = false;
+        const allKeys = new Set<string>();
+        this.variableConfigs.forEach((config) => allKeys.add(config.key));
+        this.telemetryKeys = Array.from(allKeys).sort();
+
+        this.loadingKeysByEntityId[uid] = false;
+        this.loadingKeys = Object.values(this.loadingKeysByEntityId).some(
+          Boolean,
+        );
+
+        this.syncSelectedKeysFromVariableConfigs();
+      });
+  }
+
+  variablesForEntity(entityId: any): ReportVariableConfig[] {
+    const uid = this.entityUid(entityId);
+
+    return this.variableConfigs.filter((config) =>
+      this.entityUid(config.entityId) === uid
+    );
+  }
+
+  private buildVariableConfig(
+    entityId: any,
+    key: string,
+  ): ReportVariableConfig {
+    return {
+      entityId,
+      entityName: this.displayEntity(entityId),
+      key,
+      enabled: true,
+      label: this.defaultVariableLabel(key),
+      unit: this.defaultVariableUnit(key),
+      scale: 1,
+      offset: 0,
+      chartEnabled: true,
+      tableEnabled: true,
+      granularity: "FULL",
+      stats: {
+        min: true,
+        max: true,
+        avg: true,
+        count: true,
+        sum: false,
+        first: false,
+        last: false,
+        delta: false,
       },
-      error: () => {
-        this.telemetryKeys = [];
-        this.form.patchValue({ selectedKeys: [] }, { emitEvent: false });
-        this.loadingKeys = false;
-      },
-    });
+    };
+  }
+
+  private syncSelectedKeysFromVariableConfigs(): void {
+    const selectedKeys = Array.from(
+      new Set(
+        this.variableConfigs
+          .filter((config) => config.enabled)
+          .map((config) => config.key),
+      ),
+    );
+
+    this.form.patchValue({ selectedKeys }, { emitEvent: false });
+  }
+
+  onVariableEnabledChanged(config: ReportVariableConfig, event: Event): void {
+    config.enabled = (event.target as HTMLInputElement).checked;
+    this.syncSelectedKeysFromVariableConfigs();
+  }
+
+  onVariableBooleanChanged(
+    config: ReportVariableConfig,
+    field: "chartEnabled" | "tableEnabled",
+    event: Event,
+  ): void {
+    config[field] = (event.target as HTMLInputElement).checked;
+  }
+
+  onVariableStatChanged(
+    config: ReportVariableConfig,
+    stat: keyof ReportVariableConfig["stats"],
+    event: Event,
+  ): void {
+    config.stats[stat] = (event.target as HTMLInputElement).checked;
+  }
+
+  private entityUid(entityId: any): string {
+    if (!entityId) {
+      return "";
+    }
+
+    return `${entityId.entityType}:${entityId.id}`;
+  }
+
+  private defaultVariableLabel(key: string): string {
+    const normalized = (key || "").toLowerCase();
+
+    const labels: Record<string, string> = {
+      pressure: "Presión",
+      "presión": "Presión",
+      "presiã³n": "Presión",
+      temprocio: "Punto de rocío",
+      temp_rocio: "Punto de rocío",
+      dew_point: "Punto de rocío",
+      ams_instant_flow_lpm: "Flujo instantáneo",
+      ams_cumulative_flow_l: "Consumo acumulado",
+      ams_temperature_c: "Temperatura",
+      temperature: "Temperatura",
+      humidity: "Humedad",
+      power: "Potencia",
+      energy: "Energía",
+      voltage: "Voltaje",
+      current: "Corriente",
+    };
+
+    return labels[normalized] || this.humanizeKey(key);
+  }
+
+  private defaultVariableUnit(key: string): string {
+    const normalized = (key || "").toLowerCase();
+
+    const units: Record<string, string> = {
+      pressure: "psi",
+      "presión": "psi",
+      "presiã³n": "psi",
+      temprocio: "°C",
+      temp_rocio: "°C",
+      dew_point: "°C",
+      ams_instant_flow_lpm: "L/min",
+      ams_cumulative_flow_l: "L",
+      ams_temperature_c: "°C",
+      temperature: "°C",
+      humidity: "%",
+      power: "kW",
+      energy: "kWh",
+      voltage: "V",
+      current: "A",
+    };
+
+    return units[normalized] || "";
+  }
+
+  private humanizeKey(key: string): string {
+    if (!key) {
+      return "Variable";
+    }
+
+    const text = key.replace(/[_-]/g, " ").trim();
+
+    return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
   save(): void {
@@ -218,9 +388,14 @@ export class ReportTemplateDialogComponent implements OnInit {
 
     const raw = this.form.getRawValue();
     const selectedEntityIds = raw.selectedEntityIds || [];
-    const selectedKeys = raw.selectedKeys || [];
+    const selectedVariables = this.variableConfigs.filter((config) =>
+      config.enabled
+    );
+    const selectedKeys = Array.from(
+      new Set(selectedVariables.map((config) => config.key)),
+    );
 
-    if (!selectedKeys.length) {
+    if (!selectedVariables.length) {
       this.form.get("selectedKeys")?.setErrors({ required: true });
       this.form.markAllAsTouched();
       return;
@@ -238,7 +413,7 @@ export class ReportTemplateDialogComponent implements OnInit {
         entityType: raw.entityType,
         entityIds: selectedEntityIds,
       },
-      sections: this.buildSections(selectedKeys),
+      sections: this.buildSections(selectedKeys, selectedVariables),
       branding: {
         companyName: raw.companyName,
         footerText: raw.footerText,
@@ -268,7 +443,10 @@ export class ReportTemplateDialogComponent implements OnInit {
     return entity?.label || entity?.name || entityId.id || "";
   }
 
-  private buildSections(selectedKeys: string[]): any[] {
+  private buildSections(
+    selectedKeys: string[],
+    selectedVariables: ReportVariableConfig[],
+  ): any[] {
     const sections = [];
     let order = 0;
 
@@ -294,6 +472,7 @@ export class ReportTemplateDialogComponent implements OnInit {
         pageBreakBefore: false,
         config: {
           keys: selectedKeys,
+          variables: selectedVariables,
         },
       });
     }
@@ -308,6 +487,7 @@ export class ReportTemplateDialogComponent implements OnInit {
         pageBreakBefore: false,
         config: {
           keys: selectedKeys,
+          variables: selectedVariables,
           aggregation: "AVG",
         },
       });
@@ -323,6 +503,7 @@ export class ReportTemplateDialogComponent implements OnInit {
         pageBreakBefore: false,
         config: {
           keys: selectedKeys,
+          variables: selectedVariables,
           aggregation: "AVG",
         },
       });
@@ -338,6 +519,7 @@ export class ReportTemplateDialogComponent implements OnInit {
         pageBreakBefore: true,
         config: {
           keys: selectedKeys,
+          variables: selectedVariables,
         },
       });
     }
@@ -352,6 +534,7 @@ export class ReportTemplateDialogComponent implements OnInit {
         pageBreakBefore: false,
         config: {
           keys: selectedKeys,
+          variables: selectedVariables,
         },
       });
     }
@@ -392,5 +575,56 @@ export class ReportTemplateDialogComponent implements OnInit {
     });
 
     return Array.from(keys);
+  }
+
+  private extractVariablesFromSections(
+    sections: any[],
+  ): ReportVariableConfig[] {
+    const variables: ReportVariableConfig[] = [];
+
+    (sections || []).forEach((section) => {
+      const sectionVariables = section?.config?.variables || [];
+
+      if (Array.isArray(sectionVariables)) {
+        sectionVariables.forEach((variable) => {
+          if (variable?.entityId && variable?.key) {
+            variables.push({
+              entityId: variable.entityId,
+              entityName: variable.entityName,
+              key: variable.key,
+              enabled: variable.enabled !== false,
+              label: variable.label || this.defaultVariableLabel(variable.key),
+              unit: variable.unit || this.defaultVariableUnit(variable.key),
+              scale: variable.scale ?? 1,
+              offset: variable.offset ?? 0,
+              chartEnabled: variable.chartEnabled !== false,
+              tableEnabled: variable.tableEnabled !== false,
+              granularity: variable.granularity || "FULL",
+              stats: {
+                min: variable.stats?.min !== false,
+                max: variable.stats?.max !== false,
+                avg: variable.stats?.avg !== false,
+                count: variable.stats?.count !== false,
+                sum: variable.stats?.sum === true,
+                first: variable.stats?.first === true,
+                last: variable.stats?.last === true,
+                delta: variable.stats?.delta === true,
+              },
+            });
+          }
+        });
+      }
+    });
+
+    const unique = new Map<string, ReportVariableConfig>();
+
+    variables.forEach((variable) => {
+      unique.set(
+        `${this.entityUid(variable.entityId)}:${variable.key}`,
+        variable,
+      );
+    });
+
+    return Array.from(unique.values());
   }
 }

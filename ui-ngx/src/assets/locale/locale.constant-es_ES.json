@@ -151,6 +151,7 @@
     "end_required": "Selecciona la fecha de fin.",
     "invalid_time_range": "El rango de tiempo no es válido.",
     "generating": "Generando...",
+    "variable_configuration_hint": "Configura cómo se mostrarán, convertirán y graficarán las variables seleccionadas.",
     "chart_layout": "Diseño de gráficas",
     "chart_layout_separate": "Gráficas separadas",
     "chart_layout_combined": "Todas en una gráfica"

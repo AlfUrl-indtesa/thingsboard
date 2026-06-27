@@ -152,6 +152,7 @@
         "invalid_time_range": "The time range is not valid.",
         "generating": "Generating...",
         "chart_layout": "Chart layout",
+        "variable_configuration_hint": "Configure how selected variables are displayed, converted and charted.",
         "chart_layout_separate": "Separate charts",
         "chart_layout_combined": "All in one chart"
     },

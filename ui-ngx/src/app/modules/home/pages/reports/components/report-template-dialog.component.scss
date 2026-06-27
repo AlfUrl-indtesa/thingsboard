@@ -141,3 +141,36 @@ mat-form-field {
 .unit-input-wrapper tb-unit-input {
   width: 100%;
 }
+
+.variable-config-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.variable-config-header h3 {
+  margin: 0;
+}
+
+.variable-config-subtitle {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.58);
+}
+
+.chart-layout-field {
+  width: 260px;
+  min-width: 220px;
+}
+
+@media (max-width: 860px) {
+  .variable-config-header {
+    flex-direction: column;
+  }
+
+  .chart-layout-field {
+    width: 100%;
+  }
+}

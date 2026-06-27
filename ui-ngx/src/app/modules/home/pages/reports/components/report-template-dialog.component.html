@@ -67,7 +67,26 @@
     </mat-form-field>
 
     <div class="variable-config-wrapper">
-      <h3>{{ 'reports.variable_configuration' | translate }}</h3>
+      <div class="variable-config-header">
+        <div>
+          <h3>{{ 'reports.variable_configuration' | translate }}</h3>
+          <span class="variable-config-subtitle">
+            {{ 'reports.variable_configuration_hint' | translate }}
+          </span>
+        </div>
+
+        <mat-form-field appearance="outline" class="chart-layout-field">
+          <mat-label>{{ 'reports.chart_layout' | translate }}</mat-label>
+          <mat-select formControlName="chartLayout">
+            <mat-option value="SEPARATE">
+              {{ 'reports.chart_layout_separate' | translate }}
+            </mat-option>
+            <mat-option value="COMBINED">
+              {{ 'reports.chart_layout_combined' | translate }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
 
       <div *ngIf="!form.getRawValue().selectedEntityIds?.length" class="empty-state">
         {{ 'reports.select_entities_first' | translate }}
@@ -77,6 +96,7 @@
 
         <div class="entity-variable-header">
           <strong>{{ displayEntity(entityId) }}</strong>
+
           <span *ngIf="loadingKeysByEntityId[entityId.entityType + ':' + entityId.id]">
             {{ 'reports.loading_keys' | translate }}
           </span>

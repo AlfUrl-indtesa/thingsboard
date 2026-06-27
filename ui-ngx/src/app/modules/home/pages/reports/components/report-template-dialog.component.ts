@@ -69,6 +69,9 @@ export class ReportTemplateDialogComponent implements OnInit {
     footerText: new FormControl<string>("Reporte generado por Eficentra", {
       nonNullable: true,
     }),
+    chartLayout: new FormControl<string>("SEPARATE", {
+      nonNullable: true,
+    }),
 
     includeExecutiveSummary: [true],
     includeDataQuality: [true],
@@ -133,6 +136,7 @@ export class ReportTemplateDialogComponent implements OnInit {
       selectedEntityIds: entityIds,
       selectedKeys: this.extractKeysFromSections(template.sections || []),
       companyName: template.branding?.companyName || "Eficentra",
+      chartLayout: this.extractChartLayoutFromSections(template.sections || []),
       footerText: template.branding?.footerText ||
         "Reporte generado por Eficentra",
     });
@@ -448,6 +452,7 @@ export class ReportTemplateDialogComponent implements OnInit {
     selectedVariables: ReportVariableConfig[],
   ): any[] {
     const sections = [];
+    const chartLayout = this.form.getRawValue().chartLayout || "SEPARATE";
     let order = 0;
 
     if (this.form.value.includeExecutiveSummary) {
@@ -505,6 +510,7 @@ export class ReportTemplateDialogComponent implements OnInit {
           keys: selectedKeys,
           variables: selectedVariables,
           aggregation: "AVG",
+          chartLayout,
         },
       });
     }
@@ -520,6 +526,7 @@ export class ReportTemplateDialogComponent implements OnInit {
         config: {
           keys: selectedKeys,
           variables: selectedVariables,
+          chartLayout,
         },
       });
     }
@@ -575,6 +582,12 @@ export class ReportTemplateDialogComponent implements OnInit {
     });
 
     return Array.from(keys);
+  }
+
+  private extractChartLayoutFromSections(sections: any[]): string {
+    const section = (sections || []).find((item) => item?.config?.chartLayout);
+
+    return section?.config?.chartLayout || "SEPARATE";
   }
 
   private extractVariablesFromSections(

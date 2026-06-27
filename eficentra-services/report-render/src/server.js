@@ -451,6 +451,11 @@ function renderCharts(doc, payload) {
     ensureSpace(doc, 280);
     sectionTitle(doc, 'Gráficas de serie temporal');
 
+    if (getChartLayout(payload) === 'COMBINED') {
+        renderCombinedChartsPage(doc, series);
+        return;
+    }
+
     series.forEach(item => {
         const points = item.points || [];
 
@@ -554,6 +559,231 @@ function calculateStats(points) {
         firstTs,
         lastTs
     };
+}
+
+function getChartLayout(payload) {
+    const sections = payload?.sections || [];
+
+    const chartSection = sections.find(section =>
+        section?.config?.chartLayout
+    );
+
+    return chartSection?.config?.chartLayout || 'SEPARATE';
+}
+
+function renderCombinedChartsPage(doc, series) {
+    const validSeries = (series || []).filter(item =>
+        (item.points || []).some(point =>
+            point && Number.isFinite(Number(point.value)) && Number.isFinite(Number(point.ts))
+        )
+    );
+
+    if (!validSeries.length) {
+        return;
+    }
+
+    ensureSpace(doc, 390);
+
+    doc.fontSize(12)
+        .fillColor('#111111')
+        .text('Gráfica combinada', doc.page.margins.left, doc.y, {
+            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            lineBreak: false
+        });
+
+    doc.moveDown(0.6);
+
+    doc.fontSize(8)
+        .fillColor('#666666')
+        .text('Las series se muestran normalizadas para comparar comportamiento relativo entre variables con distintas unidades.', doc.page.margins.left, doc.y, {
+            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            lineGap: 2
+        });
+
+    doc.moveDown(0.8);
+
+    const chartBox = {
+        x: doc.page.margins.left,
+        y: doc.y,
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        height: 190
+    };
+
+    drawNormalizedCombinedLineChart(doc, validSeries, chartBox);
+
+    doc.y = chartBox.y + chartBox.height + 20;
+    resetCursor(doc);
+
+    renderCombinedLegend(doc, validSeries);
+    doc.moveDown(0.8);
+
+    renderCombinedSeriesStatsTable(doc, validSeries);
+
+    resetCursor(doc);
+    doc.moveDown(1);
+}
+
+function drawNormalizedCombinedLineChart(doc, series, box) {
+    const colors = getChartColors();
+
+    const normalizedSeries = series.map(item => {
+        const points = (item.points || [])
+            .filter(point => point && Number.isFinite(Number(point.value)) && Number.isFinite(Number(point.ts)))
+            .map(point => ({
+                ts: Number(point.ts),
+                value: Number(point.value)
+            }))
+            .sort((a, b) => a.ts - b.ts);
+
+        return {
+            item,
+            points
+        };
+    }).filter(entry => entry.points.length >= 2);
+
+    if (!normalizedSeries.length) {
+        return;
+    }
+
+    const allTimes = normalizedSeries.flatMap(entry =>
+        entry.points.map(point => point.ts)
+    );
+
+    const minTs = Math.min(...allTimes);
+    const maxTs = Math.max(...allTimes);
+    const timeRange = maxTs - minTs || 1;
+
+    doc.rect(box.x, box.y, box.width, box.height).stroke('#DCE6EF');
+
+    doc.fontSize(8).fillColor('#666666');
+    doc.text('Escala relativa 0% - 100%', box.x, box.y - 12, {
+        lineBreak: false
+    });
+
+    doc.fontSize(7).fillColor('#666666');
+    doc.text(formatShortDate(minTs), box.x, box.y + box.height + 4, {
+        width: 140,
+        lineBreak: false
+    });
+
+    doc.text(formatShortDate(maxTs), box.x + box.width - 140, box.y + box.height + 4, {
+        width: 140,
+        align: 'right',
+        lineBreak: false
+    });
+
+    normalizedSeries.forEach((entry, index) => {
+        const values = entry.points.map(point => point.value);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const valueRange = max - min || 1;
+
+        const chartPoints = entry.points.map(point => {
+            const x = box.x + ((point.ts - minTs) / timeRange) * box.width;
+            const normalizedValue = ((point.value - min) / valueRange) * 100;
+            const y = box.y + box.height - (normalizedValue / 100) * box.height;
+            return { x, y };
+        });
+
+        if (chartPoints.length < 2) {
+            return;
+        }
+
+        doc.moveTo(chartPoints[0].x, chartPoints[0].y);
+
+        for (let i = 1; i < chartPoints.length; i++) {
+            doc.lineTo(chartPoints[i].x, chartPoints[i].y);
+        }
+
+        doc.strokeColor(colors[index % colors.length])
+            .lineWidth(1.4)
+            .stroke();
+    });
+
+    doc.strokeColor('#000000')
+        .lineWidth(1);
+}
+
+function renderCombinedLegend(doc, series) {
+    const colors = getChartColors();
+
+    const startX = doc.page.margins.left;
+    let x = startX;
+    let y = doc.y;
+    const maxX = doc.page.width - doc.page.margins.right;
+
+    series.forEach((item, index) => {
+        const label = safeText(`${item.label || item.key} - ${item.entityName || ''}`, 42);
+        const itemWidth = 170;
+
+        if (x + itemWidth > maxX) {
+            x = startX;
+            y += 18;
+        }
+
+        doc.rect(x, y + 3, 8, 8).fill(colors[index % colors.length]);
+
+        doc.fillColor('#333333')
+            .fontSize(7)
+            .text(label, x + 12, y, {
+                width: itemWidth - 14,
+                lineBreak: false
+            });
+
+        x += itemWidth;
+    });
+
+    doc.y = y + 22;
+    resetCursor(doc);
+}
+
+function renderCombinedSeriesStatsTable(doc, series) {
+    const columns = [
+        { key: 'series', label: 'Serie', align: 'left' },
+        { key: 'unit', label: 'Unidad', align: 'left' },
+        { key: 'samples', label: 'Muestras', align: 'right' },
+        { key: 'min', label: 'Mínimo', align: 'right' },
+        { key: 'max', label: 'Máximo', align: 'right' },
+        { key: 'avg', label: 'Promedio', align: 'right' }
+    ];
+
+    const rows = [];
+
+    series.forEach((item, index) => {
+        const stats = calculateStats(item.points || []);
+
+        if (!stats) {
+            return;
+        }
+
+        rows.push({
+            series: `${index + 1}. ${safeText(item.label || item.key, 28)}`,
+            unit: item.unit || '-',
+            samples: stats.count,
+            min: formatNumber(stats.min),
+            max: formatNumber(stats.max),
+            avg: formatNumber(stats.avg)
+        });
+    });
+
+    if (!rows.length) {
+        return;
+    }
+
+    renderCompactTable(doc, columns, rows);
+}
+
+function getChartColors() {
+    return [
+        '#1B8DD0',
+        '#00BCD4',
+        '#3656B0',
+        '#4CAF50',
+        '#FF9800',
+        '#9C27B0',
+        '#F44336',
+        '#607D8B'
+    ];
 }
 
 function renderCompactTable(doc, columns, rows) {

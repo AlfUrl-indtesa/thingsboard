@@ -1,3 +1,9 @@
+///
+/// Copyright © 2016-2026 The Thingsboard Authors
+///
+/// Licensed under the Apache License, Version 2.0 (the "License");
+///
+
 import { Component, Inject } from "@angular/core";
 import { FormBuilder, FormGroup, Validators } from "@angular/forms";
 import { MAT_DIALOG_DATA, MatDialogRef } from "@angular/material/dialog";
@@ -12,6 +18,7 @@ import { ReportService } from "../services/report.service";
 })
 export class GenerateReportDialogComponent {
   form: FormGroup;
+  generating = false;
 
   constructor(
     private fb: FormBuilder,
@@ -19,15 +26,16 @@ export class GenerateReportDialogComponent {
     private dialogRef: MatDialogRef<GenerateReportDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public template: ReportTemplate,
   ) {
-    const now = new Date();
-    const weekAgo = new Date();
-    weekAgo.setDate(now.getDate() - 7);
+    const now = Date.now();
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
     this.form = this.fb.group({
-      startTs: [weekAgo.toISOString().slice(0, 16), Validators.required],
-      endTs: [now.toISOString().slice(0, 16), Validators.required],
-      timezone: ["America/Monterrey"],
-      locale: ["es-MX"],
+      startTs: [this.toLocalDateTimeInputValue(weekAgo), Validators.required],
+      endTs: [this.toLocalDateTimeInputValue(now), Validators.required],
+      timezone: [
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Monterrey",
+      ],
+      locale: [navigator.language || "es-MX"],
     });
   }
 
@@ -39,20 +47,69 @@ export class GenerateReportDialogComponent {
       return;
     }
 
+    const raw = this.form.getRawValue();
+
+    const startTs = this.fromLocalDateTimeInputValue(raw.startTs);
+    const endTs = this.fromLocalDateTimeInputValue(raw.endTs);
+
+    if (!startTs || !endTs || startTs >= endTs) {
+      this.form.get("startTs")?.setErrors({ invalidRange: true });
+      this.form.get("endTs")?.setErrors({ invalidRange: true });
+      this.form.markAllAsTouched();
+      return;
+    }
+
     const request = {
-      startTs: new Date(this.form.value.startTs).getTime(),
-      endTs: new Date(this.form.value.endTs).getTime(),
-      timezone: this.form.value.timezone,
-      locale: this.form.value.locale,
+      startTs,
+      endTs,
+      timezone: raw.timezone,
+      locale: raw.locale,
     };
 
-    this.reportService.generateReport(templateId, request).subscribe(() => {
-      this.dialogRef.close(true);
+    this.generating = true;
+
+    this.reportService.generateReport(templateId, request).subscribe({
+      next: () => {
+        this.generating = false;
+        this.dialogRef.close(true);
+      },
+      error: () => {
+        this.generating = false;
+      },
     });
   }
 
   close(): void {
     this.dialogRef.close(false);
+  }
+
+  openNativeDateTimePicker(event: Event): void {
+    const input = event.target as HTMLInputElement;
+
+    if (input && typeof input.showPicker === "function") {
+      input.showPicker();
+    }
+  }
+
+  private toLocalDateTimeInputValue(ts: number): string {
+    const date = new Date(ts);
+    const pad = (value: number) => String(value).padStart(2, "0");
+
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  private fromLocalDateTimeInputValue(value: string): number {
+    if (!value) {
+      return null;
+    }
+
+    return new Date(value).getTime();
   }
 
   private templateUuid(): string | null {

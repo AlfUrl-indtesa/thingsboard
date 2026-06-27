@@ -146,7 +146,11 @@
     "stat_min": "Mínimo",
     "stat_max": "Máximo",
     "stat_avg": "Promedio",
-    "stat_count": "Conteo"
+    "stat_count": "Conteo",
+    "start_required": "Selecciona la fecha de inicio.",
+    "end_required": "Selecciona la fecha de fin.",
+    "invalid_time_range": "El rango de tiempo no es válido.",
+    "generating": "Generando..."
   },
   "action": {
     "activate": "Activar",

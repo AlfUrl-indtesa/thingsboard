@@ -97,10 +97,15 @@
               <input matInput [(ngModel)]="variable.label" [ngModelOptions]="{ standalone: true }">
             </mat-form-field>
 
-            <mat-form-field appearance="outline">
-              <mat-label>{{ 'reports.unit' | translate }}</mat-label>
-              <input matInput [(ngModel)]="variable.unit" [ngModelOptions]="{ standalone: true }">
-            </mat-form-field>
+            <div class="unit-input-wrapper">
+              <label class="unit-input-label">
+                {{ 'reports.unit' | translate }}
+              </label>
+
+              <tb-unit-input [(ngModel)]="variable.unit" [ngModelOptions]="{ standalone: true }" [required]="false"
+                [supportsUnitConversion]="false" [onlySystemUnits]="false">
+              </tb-unit-input>
+            </div>
 
             <mat-form-field appearance="outline">
               <mat-label>{{ 'reports.scale' | translate }}</mat-label>

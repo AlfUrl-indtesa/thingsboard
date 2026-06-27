@@ -124,3 +124,20 @@ mat-form-field {
     grid-template-columns: 1fr;
   }
 }
+
+.unit-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.unit-input-label {
+  font-size: 12px;
+  font-weight: 400;
+  margin-bottom: 4px;
+  color: rgba(0, 0, 0, 0.68);
+}
+
+.unit-input-wrapper tb-unit-input {
+  width: 100%;
+}

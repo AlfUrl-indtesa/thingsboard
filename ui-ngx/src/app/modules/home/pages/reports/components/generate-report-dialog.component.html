@@ -4,12 +4,38 @@
 
   <mat-form-field appearance="outline">
     <mat-label>{{ 'reports.start' | translate }}</mat-label>
-    <input matInput type="datetime-local" formControlName="startTime">
+    <input
+      matInput
+      type="datetime-local"
+      formControlName="startTs"
+      (click)="openNativeDateTimePicker($event)"
+      (focus)="openNativeDateTimePicker($event)">
+
+    <mat-error *ngIf="form.get('startTs')?.hasError('required')">
+      {{ 'reports.start_required' | translate }}
+    </mat-error>
+
+    <mat-error *ngIf="form.get('startTs')?.hasError('invalidRange')">
+      {{ 'reports.invalid_time_range' | translate }}
+    </mat-error>
   </mat-form-field>
 
   <mat-form-field appearance="outline">
     <mat-label>{{ 'reports.end' | translate }}</mat-label>
-    <input matInput type="datetime-local" formControlName="endTime">
+    <input
+      matInput
+      type="datetime-local"
+      formControlName="endTs"
+      (click)="openNativeDateTimePicker($event)"
+      (focus)="openNativeDateTimePicker($event)">
+
+    <mat-error *ngIf="form.get('endTs')?.hasError('required')">
+      {{ 'reports.end_required' | translate }}
+    </mat-error>
+
+    <mat-error *ngIf="form.get('endTs')?.hasError('invalidRange')">
+      {{ 'reports.invalid_time_range' | translate }}
+    </mat-error>
   </mat-form-field>
 
   <mat-form-field appearance="outline">
@@ -25,11 +51,11 @@
 </div>
 
 <div mat-dialog-actions align="end">
-  <button mat-button (click)="close()">
+  <button mat-button (click)="close()" [disabled]="generating">
     {{ 'action.cancel' | translate }}
   </button>
 
-  <button mat-raised-button color="primary" (click)="generate()">
-    {{ 'reports.generate_report' | translate }}
+  <button mat-raised-button color="primary" (click)="generate()" [disabled]="generating">
+    {{ generating ? ('reports.generating' | translate) : ('reports.generate_report' | translate) }}
   </button>
 </div>

@@ -146,7 +146,11 @@
         "stat_min": "Minimum",
         "stat_max": "Maximum",
         "stat_avg": "Average",
-        "stat_count": "Count"
+        "stat_count": "Count",
+        "start_required": "Select the start date.",
+        "end_required": "Select the end date.",
+        "invalid_time_range": "The time range is not valid.",
+        "generating": "Generating..."
     },
     "action": {
         "activate": "Activate",

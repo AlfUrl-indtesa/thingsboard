@@ -17,6 +17,7 @@ import org.thingsboard.server.common.data.report.ReportTargetEntity;
 import org.thingsboard.server.common.data.report.ReportTelemetryQuery;
 import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.common.data.report.ReportTimeSeries;
+import org.thingsboard.server.common.data.report.ReportVariableConfig;
 import org.thingsboard.server.common.data.report.ReportVariableMetadata;
 
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ public class DefaultReportTableService implements ReportTableService {
     private final ReportKpiCalculationSupport calculationSupport;
     private final ObjectMapper objectMapper;
     private final ReportVariableMetadataService variableMetadataService;
+    private final ReportVariableConfigService variableConfigService;
 
     @Override
     public List<ReportTable> buildTables(ReportTemplate template,
@@ -53,6 +55,20 @@ public class DefaultReportTableService implements ReportTableService {
                 continue;
             }
 
+            List<ReportVariableConfig> variables = variableConfigService.extractVariables(section.getConfig());
+            List<ReportVariableConfig> tableVariables = variables.stream()
+                    .filter(variable -> !Boolean.FALSE.equals(variable.getEnabled()))
+                    .filter(variable -> !Boolean.FALSE.equals(variable.getTableEnabled()))
+                    .toList();
+
+            if (!tableVariables.isEmpty()) {
+                ReportTable table = buildVariableStatsTable(tenantId, request, entities, section, tableVariables);
+                if (table != null) {
+                    result.add(table);
+                }
+                continue;
+            }
+
             List<ReportTableQuery> queries = extractTableQueries(section.getConfig());
             if (queries.isEmpty()) {
                 continue;
@@ -65,6 +81,137 @@ public class DefaultReportTableService implements ReportTableService {
         }
 
         return result;
+    }
+
+    private ReportTable buildVariableStatsTable(TenantId tenantId,
+            GenerateReportRequest request,
+            List<ReportTargetEntity> entities,
+            ReportSectionConfig section,
+            List<ReportVariableConfig> variables) {
+        if (entities == null || entities.isEmpty()) {
+            return null;
+        }
+
+        ReportTable table = new ReportTable();
+        table.setKey(section.getKey());
+        table.setTitle(section.getTitle());
+        table.setColumns(buildVariableStatsColumns(variables));
+        table.setRows(buildVariableStatsRows(tenantId, request, entities, variables));
+
+        return table;
+    }
+
+    private List<ReportTableColumn> buildVariableStatsColumns(List<ReportVariableConfig> variables) {
+        List<ReportTableColumn> columns = new ArrayList<>();
+
+        columns.add(column("entity", "Equipo", "left"));
+        columns.add(column("variable", "Variable", "left"));
+        columns.add(column("unit", "Unidad", "left"));
+
+        boolean includeCount = variables.stream()
+                .anyMatch(v -> v.getStats() == null || !Boolean.FALSE.equals(v.getStats().getCount()));
+        boolean includeMin = variables.stream()
+                .anyMatch(v -> v.getStats() == null || !Boolean.FALSE.equals(v.getStats().getMin()));
+        boolean includeMax = variables.stream()
+                .anyMatch(v -> v.getStats() == null || !Boolean.FALSE.equals(v.getStats().getMax()));
+        boolean includeAvg = variables.stream()
+                .anyMatch(v -> v.getStats() == null || !Boolean.FALSE.equals(v.getStats().getAvg()));
+        boolean includeSum = variables.stream()
+                .anyMatch(v -> v.getStats() != null && Boolean.TRUE.equals(v.getStats().getSum()));
+        boolean includeFirst = variables.stream()
+                .anyMatch(v -> v.getStats() != null && Boolean.TRUE.equals(v.getStats().getFirst()));
+        boolean includeLast = variables.stream()
+                .anyMatch(v -> v.getStats() != null && Boolean.TRUE.equals(v.getStats().getLast()));
+        boolean includeDelta = variables.stream()
+                .anyMatch(v -> v.getStats() != null && Boolean.TRUE.equals(v.getStats().getDelta()));
+
+        if (includeCount) {
+            columns.add(column("count", "Muestras", "right"));
+        }
+        if (includeMin) {
+            columns.add(column("min", "Mínimo", "right"));
+        }
+        if (includeMax) {
+            columns.add(column("max", "Máximo", "right"));
+        }
+        if (includeAvg) {
+            columns.add(column("avg", "Promedio", "right"));
+        }
+        if (includeSum) {
+            columns.add(column("sum", "Suma", "right"));
+        }
+        if (includeFirst) {
+            columns.add(column("first", "Primero", "right"));
+        }
+        if (includeLast) {
+            columns.add(column("last", "Último", "right"));
+        }
+        if (includeDelta) {
+            columns.add(column("delta", "Delta", "right"));
+        }
+
+        return columns;
+    }
+
+    private List<Map<String, Object>> buildVariableStatsRows(TenantId tenantId,
+            GenerateReportRequest request,
+            List<ReportTargetEntity> entities,
+            List<ReportVariableConfig> variables) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        for (ReportVariableConfig variable : variables) {
+            for (ReportTargetEntity entity : entities) {
+                if (!matchesEntity(variable, entity)) {
+                    continue;
+                }
+
+                ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(variable, request);
+                ReportTimeSeries series = reportTelemetryService.findSeries(tenantId, entity, telemetryQuery);
+                List<ReportMetricPoint> points = convertPoints(series != null ? series.getPoints() : null, variable);
+
+                Stats stats = calculateStats(points);
+                ReportVariableMetadata metadata = variableMetadataService.resolve(
+                        variable.getKey(),
+                        variable.getLabel(),
+                        variable.getUnit());
+
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("entity", variable.getEntityName() != null && !variable.getEntityName().isBlank()
+                        ? variable.getEntityName()
+                        : entity.getName());
+                row.put("variable", metadata.getLabel());
+                row.put("unit", metadata.getUnit() != null && !metadata.getUnit().isBlank() ? metadata.getUnit() : "-");
+
+                if (variable.getStats() == null || !Boolean.FALSE.equals(variable.getStats().getCount())) {
+                    row.put("count", stats.count);
+                }
+                if (variable.getStats() == null || !Boolean.FALSE.equals(variable.getStats().getMin())) {
+                    row.put("min", stats.hasData ? calculationSupport.format(stats.min) : "-");
+                }
+                if (variable.getStats() == null || !Boolean.FALSE.equals(variable.getStats().getMax())) {
+                    row.put("max", stats.hasData ? calculationSupport.format(stats.max) : "-");
+                }
+                if (variable.getStats() == null || !Boolean.FALSE.equals(variable.getStats().getAvg())) {
+                    row.put("avg", stats.hasData ? calculationSupport.format(stats.avg) : "-");
+                }
+                if (variable.getStats() != null && Boolean.TRUE.equals(variable.getStats().getSum())) {
+                    row.put("sum", stats.hasData ? calculationSupport.format(stats.sum) : "-");
+                }
+                if (variable.getStats() != null && Boolean.TRUE.equals(variable.getStats().getFirst())) {
+                    row.put("first", stats.hasData ? calculationSupport.format(stats.first) : "-");
+                }
+                if (variable.getStats() != null && Boolean.TRUE.equals(variable.getStats().getLast())) {
+                    row.put("last", stats.hasData ? calculationSupport.format(stats.last) : "-");
+                }
+                if (variable.getStats() != null && Boolean.TRUE.equals(variable.getStats().getDelta())) {
+                    row.put("delta", stats.hasData ? calculationSupport.format(stats.last - stats.first) : "-");
+                }
+
+                rows.add(row);
+            }
+        }
+
+        return rows;
     }
 
     private ReportTable buildTableForSection(TenantId tenantId,
@@ -150,6 +297,24 @@ public class DefaultReportTableService implements ReportTableService {
         return rows;
     }
 
+    private ReportTelemetryQuery buildTelemetryQuery(ReportVariableConfig variable,
+            GenerateReportRequest request) {
+        ReportVariableMetadata metadata = variableMetadataService.resolve(
+                variable.getKey(),
+                variable.getLabel(),
+                variable.getUnit());
+
+        ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
+        telemetryQuery.setKey(variable.getKey());
+        telemetryQuery.setLabel(metadata.getLabel());
+        telemetryQuery.setUnit(metadata.getUnit());
+        telemetryQuery.setStartTs(request.getStartTs());
+        telemetryQuery.setEndTs(request.getEndTs());
+        telemetryQuery.setAggregation(org.thingsboard.server.common.data.report.ReportAggregationType.NONE);
+        telemetryQuery.setOrderBy("ASC");
+        return telemetryQuery;
+    }
+
     private ReportTelemetryQuery buildTelemetryQuery(ReportTableQuery query,
             GenerateReportRequest request) {
         ReportVariableMetadata metadata = variableMetadataService.resolve(
@@ -166,6 +331,80 @@ public class DefaultReportTableService implements ReportTableService {
         telemetryQuery.setAggregation(mapTelemetryAggregation(query.getAggregation()));
         telemetryQuery.setOrderBy("ASC");
         return telemetryQuery;
+    }
+
+    private List<ReportMetricPoint> convertPoints(List<ReportMetricPoint> points,
+            ReportVariableConfig variable) {
+        List<ReportMetricPoint> converted = new ArrayList<>();
+
+        if (points == null || points.isEmpty()) {
+            return converted;
+        }
+
+        for (ReportMetricPoint point : points) {
+            if (point == null || point.getValue() == null) {
+                continue;
+            }
+
+            converted.add(new ReportMetricPoint(
+                    point.getTs(),
+                    variableConfigService.applyConversion(variable, point.getValue())));
+        }
+
+        return converted;
+    }
+
+    private Stats calculateStats(List<ReportMetricPoint> points) {
+        Stats stats = new Stats();
+
+        if (points == null || points.isEmpty()) {
+            return stats;
+        }
+
+        for (ReportMetricPoint point : points) {
+            if (point == null || point.getValue() == null) {
+                continue;
+            }
+
+            double value = point.getValue();
+
+            if (!stats.hasData) {
+                stats.min = value;
+                stats.max = value;
+                stats.first = value;
+                stats.last = value;
+                stats.hasData = true;
+            }
+
+            stats.count++;
+            stats.sum += value;
+            stats.min = Math.min(stats.min, value);
+            stats.max = Math.max(stats.max, value);
+            stats.last = value;
+        }
+
+        if (stats.count > 0) {
+            stats.avg = stats.sum / stats.count;
+        }
+
+        return stats;
+    }
+
+    private boolean matchesEntity(ReportVariableConfig variable, ReportTargetEntity entity) {
+        if (variable == null || variable.getEntityId() == null || entity == null) {
+            return false;
+        }
+
+        return variable.getEntityId().getId().equals(entity.getEntityId())
+                && variable.getEntityId().getEntityType().name().equals(entity.getEntityType());
+    }
+
+    private ReportTableColumn column(String key, String label, String align) {
+        ReportTableColumn column = new ReportTableColumn();
+        column.setKey(key);
+        column.setLabel(label);
+        column.setAlign(align);
+        return column;
     }
 
     private String resolveColumnKey(ReportTableQuery query) {
@@ -197,29 +436,17 @@ public class DefaultReportTableService implements ReportTableService {
 
     private org.thingsboard.server.common.data.report.ReportAggregationType mapTelemetryAggregation(
             ReportKpiAggregationType aggregation) {
-        if (aggregation == null) {
-            return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-        }
+        return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
+    }
 
-        switch (aggregation) {
-            case AVG:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-            case MIN:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-            case MAX:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-            case SUM:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-            case COUNT:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-            case FIRST:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-            case LAST:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-            case DELTA:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-            default:
-                return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-        }
+    private static class Stats {
+        boolean hasData = false;
+        int count = 0;
+        double min = 0;
+        double max = 0;
+        double avg = 0;
+        double sum = 0;
+        double first = 0;
+        double last = 0;
     }
 }

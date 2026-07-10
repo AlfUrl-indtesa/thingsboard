@@ -36,14 +36,25 @@ app.post('/render-report', (req, res) => {
         });
 
         renderCover(doc, payload);
-        renderExecutiveSummary(doc, payload);
-        renderDataQuality(doc, payload);
-        renderKpis(doc, payload);
-        renderStatisticsTables(doc, payload);
-        renderCharts(doc, payload);
-        renderObservations(doc, payload);
-        renderConclusion(doc, payload);
+        normalizePdfState(doc);
 
+        renderExecutiveSummary(doc, payload);
+        normalizePdfState(doc);
+
+        renderKpis(doc, payload);
+        normalizePdfState(doc);
+
+        renderStatisticsTables(doc, payload);
+        normalizePdfState(doc);
+
+        renderCharts(doc, payload);
+        normalizePdfState(doc);
+
+        renderObservations(doc, payload);
+        normalizePdfState(doc);
+
+        renderConclusion(doc, payload);
+        normalizePdfState(doc);
         doc.end();
     } catch (err) {
         console.error('Failed to render report:', err);
@@ -562,13 +573,57 @@ function calculateStats(points) {
 }
 
 function getChartLayout(payload) {
-    const sections = payload?.sections || [];
+    const layout = findChartLayout(payload, 0);
 
-    const chartSection = sections.find(section =>
-        section?.config?.chartLayout
-    );
+    if (!layout) {
+        return 'SEPARATE';
+    }
 
-    return chartSection?.config?.chartLayout || 'SEPARATE';
+    const normalized = String(layout).toUpperCase();
+
+    if (normalized === 'COMBINED') {
+        return 'COMBINED';
+    }
+
+    return 'SEPARATE';
+}
+
+function findChartLayout(node, depth) {
+    if (!node || depth > 8) {
+        return null;
+    }
+
+    if (Array.isArray(node)) {
+        for (const item of node) {
+            const found = findChartLayout(item, depth + 1);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    if (typeof node !== 'object') {
+        return null;
+    }
+
+    if (node.chartLayout) {
+        return node.chartLayout;
+    }
+
+    if (node.config && node.config.chartLayout) {
+        return node.config.chartLayout;
+    }
+
+    for (const value of Object.values(node)) {
+        const found = findChartLayout(value, depth + 1);
+        if (found) {
+            return found;
+        }
+    }
+
+    return null;
 }
 
 function renderCombinedChartsPage(doc, series) {
@@ -615,9 +670,16 @@ function renderCombinedChartsPage(doc, series) {
     resetCursor(doc);
 
     renderCombinedLegend(doc, validSeries);
+    normalizePdfState(doc);
+
     doc.moveDown(0.8);
+    normalizePdfState(doc);
 
     renderCombinedSeriesStatsTable(doc, validSeries);
+    normalizePdfState(doc);
+
+    doc.moveDown(1);
+    normalizePdfState(doc);
 
     resetCursor(doc);
     doc.moveDown(1);
@@ -916,40 +978,57 @@ function cleanObservation(text, payload) {
 }
 
 function renderObservations(doc, payload) {
-    const manualObservations = payload?.summary?.observations || payload?.data?.observations || [];
-    const automaticObservations = buildAutomaticObservations(payload);
-
-    const observations = [
-        ...manualObservations,
-        ...automaticObservations
-    ];
+    const observations = payload?.summary?.observations || payload?.data?.observations || [];
 
     if (!observations.length) {
         return;
     }
 
-    ensureSpace(doc, 180);
-    resetCursor(doc);
-    sectionTitle(doc, 'Observaciones técnicas');
+    normalizePdfState(doc);
+    ensureSpace(doc, 160);
+    normalizePdfState(doc);
 
-    observations.forEach(obs => {
-        resetCursor(doc);
-        ensureSpace(doc, 42);
-        resetCursor(doc);
+    sectionTitle(doc, 'Observaciones');
+    normalizePdfState(doc);
 
-        const text = cleanObservation(obs, payload);
+    observations.forEach((observation, index) => {
+        const text = cleanObservation(
+            typeof observation === 'string' ? observation : observation?.text,
+            payload
+        );
+
+        if (!text) {
+            return;
+        }
+
+        ensureSpace(doc, 70);
+        normalizePdfState(doc);
+
+        const left = doc.page.margins.left;
+        const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+        const bulletY = doc.y;
+
+        doc.fontSize(9)
+            .fillColor('#1B8DD0')
+            .text(`${index + 1}.`, left, bulletY, {
+                width: 20,
+                lineBreak: false
+            });
 
         doc.fontSize(9)
             .fillColor('#333333')
-            .text(`• ${text}`, doc.page.margins.left, doc.y, {
-                width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            .text(safeText(text, 700), left + 24, bulletY, {
+                width: width - 24,
                 align: 'left',
-                lineGap: 2
+                lineGap: 3
             });
 
+        normalizePdfState(doc);
         doc.moveDown(0.45);
-        resetCursor(doc);
     });
+
+    normalizePdfState(doc);
 }
 
 function buildAutomaticObservations(payload) {
@@ -1004,37 +1083,38 @@ function buildAutomaticObservations(payload) {
 
     return observations;
 }
+
 function renderConclusion(doc, payload) {
+    const conclusion =
+        payload?.summary?.conclusion ||
+        payload?.data?.conclusion ||
+        'El reporte concentra las variables seleccionadas para facilitar la revisión operativa, identificar desviaciones y respaldar decisiones de mantenimiento, eficiencia y control.';
+
+    const text = cleanObservation(conclusion, payload);
+
+    if (!text) {
+        return;
+    }
+
+    normalizePdfState(doc);
     ensureSpace(doc, 170);
-    resetCursor(doc);
+    normalizePdfState(doc);
+
     sectionTitle(doc, 'Conclusión');
+    normalizePdfState(doc);
 
-    const kpis = payload?.summary?.kpis || [];
-    const observations = payload?.summary?.observations || [];
+    const left = doc.page.margins.left;
+    const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-    const text = `El reporte fue generado correctamente con ${kpis.length} indicador(es) y ${observations.length} observación(es) técnicas. La información presentada permite revisar el comportamiento operativo del periodo seleccionado y detectar variaciones relevantes en las variables monitoreadas.`;
-
-    resetCursor(doc);
-
-    doc.fontSize(9)
+    doc.fontSize(10)
         .fillColor('#333333')
-        .text(text, doc.page.margins.left, doc.y, {
-            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        .text(safeText(text, 1200), left, doc.y, {
+            width,
             align: 'left',
-            lineGap: 2
+            lineGap: 4
         });
 
-    doc.moveDown(2);
-    resetCursor(doc);
-
-    doc.fontSize(8)
-        .fillColor('#666666')
-        .text(payload?.branding?.footerText || 'Reporte generado por Eficentra', doc.page.margins.left, doc.y, {
-            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-            align: 'left'
-        });
-
-    resetCursor(doc);
+    normalizePdfState(doc);
 }
 
 function sectionTitle(doc, title) {
@@ -1115,6 +1195,33 @@ function formatNumber(value) {
     }
 
     return number.toFixed(2);
+}
+
+function normalizePdfState(doc) {
+    if (!doc || !doc.page) {
+        return;
+    }
+
+    doc.fillColor('#111111');
+    doc.strokeColor('#000000');
+    doc.lineWidth(1);
+
+    if (!Number.isFinite(doc.y)) {
+        doc.y = doc.page.margins.top;
+    }
+
+    if (doc.y < doc.page.margins.top) {
+        doc.y = doc.page.margins.top;
+    }
+
+    const maxY = doc.page.height - doc.page.margins.bottom;
+
+    if (doc.y > maxY) {
+        doc.addPage();
+        doc.y = doc.page.margins.top;
+    }
+
+    resetCursor(doc);
 }
 
 function safeText(value, maxLength = 48) {

@@ -9,6 +9,7 @@ import {
   ReportExecution,
   ReportTemplate,
 } from "../models/report.models";
+import { catchError, map } from "rxjs/operators";
 
 @Injectable({
   providedIn: "root",
@@ -113,5 +114,46 @@ export class ReportService {
     return this.http.get<string[]>("/api/reports/selectable-entity-keys", {
       params,
     });
+  }
+
+  getFirstTelemetryTs(
+    entityType: string,
+    entityId: string,
+    keys: string[],
+  ): Observable<number | null> {
+    const safeKeys = Array.from(new Set((keys || []).filter((key) => !!key)));
+
+    if (!entityType || !entityId || !safeKeys.length) {
+      return of(null);
+    }
+
+    const params = new HttpParams()
+      .set("keys", safeKeys.join(","))
+      .set("startTs", "0")
+      .set("endTs", String(Date.now()))
+      .set("interval", "0")
+      .set("limit", "1")
+      .set("agg", "NONE")
+      .set("orderBy", "ASC");
+
+    return this.http.get<Record<string, Array<{ ts: number; value: any }>>>(
+      `/api/plugins/telemetry/${entityType}/${entityId}/values/timeseries`,
+      { params },
+    ).pipe(
+      map((data) => {
+        let firstTs: number | null = null;
+
+        Object.values(data || {}).forEach((points) => {
+          (points || []).forEach((point) => {
+            if (point?.ts && (firstTs === null || point.ts < firstTs)) {
+              firstTs = point.ts;
+            }
+          });
+        });
+
+        return firstTs;
+      }),
+      catchError(() => of(null)),
+    );
   }
 }

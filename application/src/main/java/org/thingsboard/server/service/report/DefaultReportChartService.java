@@ -169,7 +169,8 @@ public class DefaultReportChartService implements ReportChartService {
         return telemetryQuery;
     }
 
-    private void applyVariableMetadata(ReportTimeSeries series, ReportVariableConfig variable) {
+    private void applyVariableMetadata(ReportTimeSeries series,
+            ReportVariableConfig variable) {
         ReportVariableMetadata metadata = variableMetadataService.resolve(
                 variable.getKey(),
                 variable.getLabel(),
@@ -178,8 +179,14 @@ public class DefaultReportChartService implements ReportChartService {
         series.setKey(variable.getKey());
         series.setLabel(metadata.getLabel());
         series.setUnit(metadata.getUnit());
+        series.setGranularity(
+                variable.getGranularity() != null
+                        && !variable.getGranularity().isBlank()
+                                ? variable.getGranularity().toUpperCase()
+                                : "FULL");
 
-        if (variable.getEntityName() != null && !variable.getEntityName().isBlank()) {
+        if (variable.getEntityName() != null
+                && !variable.getEntityName().isBlank()) {
             series.setEntityName(variable.getEntityName());
         }
     }

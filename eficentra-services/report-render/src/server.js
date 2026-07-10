@@ -1395,14 +1395,16 @@ function getSeriesGranularity(payload, item) {
     const variable = findVariableConfigForSeries(payload, item);
 
     const rawGranularity =
-        variable?.granularity ||
         item?.granularity ||
         item?.chartGranularity ||
+        variable?.granularity ||
         'FULL';
 
     const granularity = String(rawGranularity).toUpperCase();
 
-    if (['DAY', 'WEEK', 'MONTH'].includes(granularity)) {
+    if (granularity === 'DAY' ||
+        granularity === 'WEEK' ||
+        granularity === 'MONTH') {
         return granularity;
     }
 

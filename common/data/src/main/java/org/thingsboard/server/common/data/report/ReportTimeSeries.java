@@ -16,6 +16,7 @@ public class ReportTimeSeries {
     private String key;
     private String label;
     private String unit;
+    private String granularity;
 
     private ReportAggregationType aggregation;
 

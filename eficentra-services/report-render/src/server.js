@@ -459,50 +459,23 @@ function renderCharts(doc, payload) {
         return;
     }
 
+    normalizePdfState(doc);
     ensureSpace(doc, 280);
     sectionTitle(doc, 'Gráficas de serie temporal');
+    normalizePdfState(doc);
 
-    if (getChartLayout(payload) === 'COMBINED') {
-        renderCombinedChartsPage(doc, series);
+    const chartLayout = getChartLayout(payload);
+
+    if (chartLayout === 'COMBINED') {
+        renderCombinedChartsWithGranularity(doc, payload, series);
         return;
     }
 
     series.forEach(item => {
-        const points = item.points || [];
-
-        if (!points.length) {
-            return;
-        }
-
-        ensureSpace(doc, 300);
-
-        const title = `${item.label || item.key} - ${item.entityName || ''}`;
-
-        doc.fontSize(12)
-            .fillColor('#111111')
-            .text(safeText(title, 80), {
-                width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-                lineBreak: false
-            });
-
-        doc.moveDown(0.6);
-
-        const chartBox = {
-            x: doc.page.margins.left,
-            y: doc.y,
-            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-            height: 150
-        };
-
-        drawLineChart(doc, points, chartBox);
-
-        doc.y = chartBox.y + chartBox.height + 14;
-
-        renderSeriesMiniTable(doc, item);
-        resetCursor(doc);
-
-        doc.moveDown(1);
+        renderSeriesWithGranularity(doc, payload, item);
     });
+
+    normalizePdfState(doc);
 }
 
 function renderSeriesMiniTable(doc, series) {
@@ -534,6 +507,86 @@ function renderSeriesMiniTable(doc, series) {
     ];
 
     renderCompactTable(doc, columns, rows);
+}
+
+function renderCombinedChartsWithGranularity(doc, payload, series) {
+    const granularity = getCombinedChartGranularity(payload, series);
+    const timezone = getPayloadTimezone(payload);
+
+    console.log('[report-render] combined granularity=', granularity, 'series=', series.length);
+
+    if (granularity === 'FULL') {
+        renderCombinedChartsPage(doc, series, null);
+        return;
+    }
+
+    const groups = splitSeriesByGranularity(series, granularity, timezone);
+
+    console.log('[report-render] combined periods=', groups.length);
+
+    if (!groups.length) {
+        renderCombinedChartsPage(doc, series, null);
+        return;
+    }
+
+    groups.forEach(group => {
+        renderCombinedChartsPage(doc, group.series, group.label);
+    });
+
+    normalizePdfState(doc);
+}
+
+function getCombinedChartGranularity(payload, series) {
+    const granularities = (series || [])
+        .map(item => getSeriesGranularity(payload, item))
+        .filter(granularity => granularity && granularity !== 'FULL');
+
+    if (!granularities.length) {
+        return 'FULL';
+    }
+
+    // Si hay mezcla, usamos la división más detallada.
+    // DAY domina sobre WEEK, WEEK domina sobre MONTH.
+    if (granularities.includes('DAY')) {
+        return 'DAY';
+    }
+
+    if (granularities.includes('WEEK')) {
+        return 'WEEK';
+    }
+
+    if (granularities.includes('MONTH')) {
+        return 'MONTH';
+    }
+
+    return 'FULL';
+}
+
+function splitSeriesByGranularity(series, granularity, timezone) {
+    const groups = new Map();
+
+    (series || []).forEach(item => {
+        const pointGroups = splitPointsByGranularity(item.points || [], granularity, timezone);
+
+        pointGroups.forEach(pointGroup => {
+            if (!groups.has(pointGroup.key)) {
+                groups.set(pointGroup.key, {
+                    key: pointGroup.key,
+                    label: pointGroup.label,
+                    series: []
+                });
+            }
+
+            groups.get(pointGroup.key).series.push({
+                ...item,
+                points: pointGroup.points
+            });
+        });
+    });
+
+    return Array.from(groups.values())
+        .filter(group => group.series.some(item => (item.points || []).length))
+        .sort((a, b) => String(a.key).localeCompare(String(b.key)));
 }
 
 function calculateStats(points) {
@@ -626,7 +679,7 @@ function findChartLayout(node, depth) {
     return null;
 }
 
-function renderCombinedChartsPage(doc, series) {
+function renderCombinedChartsPage(doc, series, periodLabel) {
     const validSeries = (series || []).filter(item =>
         (item.points || []).some(point =>
             point && Number.isFinite(Number(point.value)) && Number.isFinite(Number(point.ts))
@@ -641,7 +694,7 @@ function renderCombinedChartsPage(doc, series) {
 
     doc.fontSize(12)
         .fillColor('#111111')
-        .text('Gráfica combinada', doc.page.margins.left, doc.y, {
+        .text(periodLabel ? `Gráfica combinada | ${periodLabel}` : 'Gráfica combinada', doc.page.margins.left, doc.y, {
             width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
             lineBreak: false
         });
@@ -1256,6 +1309,351 @@ function formatTableDate(value) {
         hour: '2-digit',
         minute: '2-digit'
     });
+}
+
+function renderSeriesWithGranularity(doc, payload, item) {
+    const points = item?.points || [];
+
+    if (!points.length) {
+        return;
+    }
+
+    const granularity = getSeriesGranularity(payload, item);
+
+    if (granularity === 'FULL') {
+        renderSingleSeriesChart(doc, item, null);
+        return;
+    }
+
+    const groups = splitPointsByGranularity(points, granularity, getPayloadTimezone(payload));
+
+    if (!groups.length) {
+        renderSingleSeriesChart(doc, item, null);
+        return;
+    }
+
+    groups.forEach(group => {
+        if (!group.points.length) {
+            return;
+        }
+
+        const groupedItem = {
+            ...item,
+            points: group.points
+        };
+
+        renderSingleSeriesChart(doc, groupedItem, group.label);
+    });
+}
+
+function renderSingleSeriesChart(doc, item, periodLabel) {
+    const points = item?.points || [];
+
+    if (!points.length) {
+        return;
+    }
+
+    ensureSpace(doc, 300);
+    normalizePdfState(doc);
+
+    let title = `${item.label || item.key} - ${item.entityName || ''}`;
+
+    if (periodLabel) {
+        title = `${title} | ${periodLabel}`;
+    }
+
+    doc.fontSize(12)
+        .fillColor('#111111')
+        .text(safeText(title, 100), doc.page.margins.left, doc.y, {
+            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            lineBreak: false
+        });
+
+    doc.moveDown(0.6);
+    normalizePdfState(doc);
+
+    const chartBox = {
+        x: doc.page.margins.left,
+        y: doc.y,
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        height: 150
+    };
+
+    drawLineChart(doc, points, chartBox);
+
+    doc.y = chartBox.y + chartBox.height + 14;
+    normalizePdfState(doc);
+
+    renderSeriesMiniTable(doc, item);
+    normalizePdfState(doc);
+
+    doc.moveDown(1);
+    normalizePdfState(doc);
+}
+
+function getSeriesGranularity(payload, item) {
+    const variable = findVariableConfigForSeries(payload, item);
+
+    const rawGranularity =
+        variable?.granularity ||
+        item?.granularity ||
+        item?.chartGranularity ||
+        'FULL';
+
+    const granularity = String(rawGranularity).toUpperCase();
+
+    if (['DAY', 'WEEK', 'MONTH'].includes(granularity)) {
+        return granularity;
+    }
+
+    return 'FULL';
+}
+
+function findVariableConfigForSeries(payload, item) {
+    const variables = extractVariableConfigs(payload);
+
+    if (!variables.length || !item) {
+        return null;
+    }
+
+    const itemKey = String(item.key || '').trim();
+    const itemEntityName = String(item.entityName || '').trim();
+    const itemLabel = String(item.label || '').trim();
+
+    return variables.find(variable => {
+        if (!variable || variable.enabled === false) {
+            return false;
+        }
+
+        const variableKey = String(variable.key || '').trim();
+        const variableEntityName = String(variable.entityName || '').trim();
+        const variableLabel = String(variable.label || '').trim();
+
+        const keyMatches = variableKey && itemKey && variableKey === itemKey;
+
+        const entityMatches =
+            !variableEntityName ||
+            !itemEntityName ||
+            variableEntityName === itemEntityName;
+
+        const labelMatches =
+            !variableLabel ||
+            !itemLabel ||
+            variableLabel === itemLabel;
+
+        return keyMatches && entityMatches && labelMatches;
+    }) || variables.find(variable => {
+        const variableKey = String(variable?.key || '').trim();
+        return variableKey && itemKey && variableKey === itemKey;
+    }) || null;
+}
+
+function extractVariableConfigs(payload) {
+    const variables = [];
+    collectVariableConfigs(payload, variables, 0);
+
+    const seen = new Set();
+    const unique = [];
+
+    variables.forEach(variable => {
+        const entityId = variable?.entityId?.id || '';
+        const entityType = variable?.entityId?.entityType || '';
+        const key = variable?.key || '';
+        const uniqueKey = `${entityType}:${entityId}:${key}`;
+
+        if (!seen.has(uniqueKey)) {
+            seen.add(uniqueKey);
+            unique.push(variable);
+        }
+    });
+
+    return unique;
+}
+
+function collectVariableConfigs(node, variables, depth) {
+    if (!node || depth > 8) {
+        return;
+    }
+
+    if (Array.isArray(node)) {
+        node.forEach(item => collectVariableConfigs(item, variables, depth + 1));
+        return;
+    }
+
+    if (typeof node !== 'object') {
+        return;
+    }
+
+    if (Array.isArray(node.variables)) {
+        node.variables.forEach(variable => {
+            if (variable?.key) {
+                variables.push(variable);
+            }
+        });
+    }
+
+    if (node.config && Array.isArray(node.config.variables)) {
+        node.config.variables.forEach(variable => {
+            if (variable?.key) {
+                variables.push(variable);
+            }
+        });
+    }
+
+    Object.values(node).forEach(value => collectVariableConfigs(value, variables, depth + 1));
+}
+
+function splitPointsByGranularity(points, granularity, timezone) {
+    const groups = new Map();
+
+    (points || [])
+        .filter(point => point && Number.isFinite(Number(point.ts)) && Number.isFinite(Number(point.value)))
+        .sort((a, b) => Number(a.ts) - Number(b.ts))
+        .forEach(point => {
+            const ts = Number(point.ts);
+            const key = getPeriodKey(ts, granularity, timezone);
+            const label = getPeriodLabel(ts, granularity, timezone);
+
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    key,
+                    label,
+                    points: []
+                });
+            }
+
+            groups.get(key).points.push(point);
+        });
+
+    return Array.from(groups.values());
+}
+
+function getPeriodKey(ts, granularity, timezone) {
+    const parts = getDateParts(ts, timezone);
+
+    if (granularity === 'DAY') {
+        return `${parts.year}-${parts.month}-${parts.day}`;
+    }
+
+    if (granularity === 'WEEK') {
+        const week = getIsoWeek(parts.year, parts.month, parts.day);
+        return `${week.year}-W${String(week.week).padStart(2, '0')}`;
+    }
+
+    if (granularity === 'MONTH') {
+        return `${parts.year}-${parts.month}`;
+    }
+
+    return 'FULL';
+}
+
+function getPeriodLabel(ts, granularity, timezone) {
+    const parts = getDateParts(ts, timezone);
+
+    if (granularity === 'DAY') {
+        return `${parts.day}/${parts.month}/${parts.year}`;
+    }
+
+    if (granularity === 'WEEK') {
+        const week = getIsoWeek(parts.year, parts.month, parts.day);
+        return `Semana ${week.week}, ${week.year}`;
+    }
+
+    if (granularity === 'MONTH') {
+        return `${parts.month}/${parts.year}`;
+    }
+
+    return '';
+}
+
+function getDateParts(ts, timezone) {
+    try {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timezone || 'UTC',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+
+        const parts = formatter.formatToParts(new Date(ts));
+        const map = {};
+
+        parts.forEach(part => {
+            map[part.type] = part.value;
+        });
+
+        return {
+            year: Number(map.year),
+            month: String(map.month).padStart(2, '0'),
+            day: String(map.day).padStart(2, '0')
+        };
+    } catch (e) {
+        const date = new Date(ts);
+
+        return {
+            year: date.getFullYear(),
+            month: String(date.getMonth() + 1).padStart(2, '0'),
+            day: String(date.getDate()).padStart(2, '0')
+        };
+    }
+}
+
+function getIsoWeek(year, month, day) {
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    const dayNumber = date.getUTCDay() || 7;
+
+    date.setUTCDate(date.getUTCDate() + 4 - dayNumber);
+
+    const weekYear = date.getUTCFullYear();
+    const yearStart = new Date(Date.UTC(weekYear, 0, 1));
+    const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+
+    return {
+        year: weekYear,
+        week
+    };
+}
+
+function getPayloadTimezone(payload) {
+    return findTimezone(payload, 0) || 'UTC';
+}
+
+function findTimezone(node, depth) {
+    if (!node || depth > 6) {
+        return null;
+    }
+
+    if (Array.isArray(node)) {
+        for (const item of node) {
+            const found = findTimezone(item, depth + 1);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    if (typeof node !== 'object') {
+        return null;
+    }
+
+    if (node.timezone) {
+        return node.timezone;
+    }
+
+    if (node.timeZone) {
+        return node.timeZone;
+    }
+
+    for (const value of Object.values(node)) {
+        const found = findTimezone(value, depth + 1);
+        if (found) {
+            return found;
+        }
+    }
+
+    return null;
 }
 
 const port = process.env.PORT || 3000;

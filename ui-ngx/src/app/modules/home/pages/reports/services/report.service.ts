@@ -2,7 +2,7 @@ import { HttpParams } from "@angular/common/http";
 import { PageData, ReportSelectableEntity } from "../models/report.models";
 import { Injectable } from "@angular/core";
 import { HttpClient } from "@angular/common/http";
-import { Observable } from "rxjs";
+import { Observable, of } from "rxjs";
 import {
   GenerateReportRequest,
   GenerateReportResponse,

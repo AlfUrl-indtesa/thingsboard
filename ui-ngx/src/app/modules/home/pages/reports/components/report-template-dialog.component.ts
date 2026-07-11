@@ -69,6 +69,45 @@ export class ReportTemplateDialogComponent implements OnInit {
     footerText: new FormControl<string>("Reporte generado por Eficentra", {
       nonNullable: true,
     }),
+    customerName: new FormControl<string>("", {
+      nonNullable: true,
+    }),
+
+    siteName: new FormControl<string>("", {
+      nonNullable: true,
+    }),
+
+    coverTitle: new FormControl<string>("Reporte de desempeño", {
+      nonNullable: true,
+    }),
+
+    coverSubtitle: new FormControl<string>("", {
+      nonNullable: true,
+    }),
+
+    logoUrl: new FormControl<string>("", {
+      nonNullable: true,
+    }),
+
+    primaryColor: new FormControl<string>("#1B8DD0", {
+      nonNullable: true,
+    }),
+
+    secondaryColor: new FormControl<string>("#00BCD4", {
+      nonNullable: true,
+    }),
+
+    confidentialityText: new FormControl<string>("Información confidencial", {
+      nonNullable: true,
+    }),
+
+    showPageNumbers: new FormControl<boolean>(true, {
+      nonNullable: true,
+    }),
+
+    showGeneratedDate: new FormControl<boolean>(true, {
+      nonNullable: true,
+    }),
     chartLayout: new FormControl<string>("SEPARATE", {
       nonNullable: true,
     }),
@@ -139,6 +178,27 @@ export class ReportTemplateDialogComponent implements OnInit {
       chartLayout: this.extractChartLayoutFromSections(template.sections || []),
       footerText: template.branding?.footerText ||
         "Reporte generado por Eficentra",
+      customerName: template.branding?.customerName || "",
+      siteName: template.branding?.siteName || "",
+
+      coverTitle: template.branding?.coverTitle ||
+        template.name ||
+        "Reporte de desempeño",
+
+      coverSubtitle: template.branding?.coverSubtitle || "",
+
+      logoUrl: template.branding?.logoUrl || "",
+
+      primaryColor: template.branding?.primaryColor || "#1B8DD0",
+
+      secondaryColor: template.branding?.secondaryColor || "#00BCD4",
+
+      confidentialityText: template.branding?.confidentialityText ||
+        "Información confidencial",
+
+      showPageNumbers: template.branding?.showPageNumbers !== false,
+
+      showGeneratedDate: template.branding?.showGeneratedDate !== false,
     });
 
     this.variableConfigs = this.extractVariablesFromSections(
@@ -264,14 +324,20 @@ export class ReportTemplateDialogComponent implements OnInit {
       entityId,
       entityName: this.displayEntity(entityId),
       key,
+
       enabled: true,
+
       label: this.defaultVariableLabel(key),
       unit: this.defaultVariableUnit(key),
+
       scale: 1,
       offset: 0,
+
       chartEnabled: true,
       tableEnabled: true,
+
       granularity: "FULL",
+
       stats: {
         min: true,
         max: true,
@@ -281,6 +347,30 @@ export class ReportTemplateDialogComponent implements OnInit {
         first: false,
         last: false,
         delta: false,
+      },
+
+      analysis: {
+        enabled: false,
+
+        expectedRange: {
+          enabled: false,
+          min: null,
+          max: null,
+        },
+
+        warningRange: {
+          enabled: false,
+          min: null,
+          max: null,
+        },
+
+        performanceDirection: "TARGET_RANGE",
+
+        comparePreviousPeriod: true,
+        detectTrend: true,
+        detectOutliers: false,
+
+        minimumCoveragePct: 80,
       },
     };
   }
@@ -420,7 +510,22 @@ export class ReportTemplateDialogComponent implements OnInit {
       sections: this.buildSections(selectedKeys, selectedVariables),
       branding: {
         companyName: raw.companyName,
+        customerName: raw.customerName,
+        siteName: raw.siteName,
+
+        coverTitle: raw.coverTitle,
+        coverSubtitle: raw.coverSubtitle,
+
+        logoUrl: raw.logoUrl,
+
+        primaryColor: raw.primaryColor || "#1B8DD0",
+        secondaryColor: raw.secondaryColor || "#00BCD4",
+
         footerText: raw.footerText,
+        confidentialityText: raw.confidentialityText,
+
+        showPageNumbers: raw.showPageNumbers,
+        showGeneratedDate: raw.showGeneratedDate,
       },
       outputFormat: "PDF",
       system: false,
@@ -596,48 +701,134 @@ export class ReportTemplateDialogComponent implements OnInit {
     const variables: ReportVariableConfig[] = [];
 
     (sections || []).forEach((section) => {
-      const sectionVariables = section?.config?.variables || [];
+      const sectionVariables = section?.config?.variables;
 
-      if (Array.isArray(sectionVariables)) {
-        sectionVariables.forEach((variable) => {
-          if (variable?.entityId && variable?.key) {
-            variables.push({
-              entityId: variable.entityId,
-              entityName: variable.entityName,
-              key: variable.key,
-              enabled: variable.enabled !== false,
-              label: variable.label || this.defaultVariableLabel(variable.key),
-              unit: variable.unit || this.defaultVariableUnit(variable.key),
-              scale: variable.scale ?? 1,
-              offset: variable.offset ?? 0,
-              chartEnabled: variable.chartEnabled !== false,
-              tableEnabled: variable.tableEnabled !== false,
-              granularity: variable.granularity || "FULL",
-              stats: {
-                min: variable.stats?.min !== false,
-                max: variable.stats?.max !== false,
-                avg: variable.stats?.avg !== false,
-                count: variable.stats?.count !== false,
-                sum: variable.stats?.sum === true,
-                first: variable.stats?.first === true,
-                last: variable.stats?.last === true,
-                delta: variable.stats?.delta === true,
-              },
-            });
-          }
-        });
+      if (!Array.isArray(sectionVariables)) {
+        return;
+      }
+
+      sectionVariables.forEach((variable: any) => {
+        if (!variable?.entityId || !variable?.key) {
+          return;
+        }
+
+        const normalizedVariable: ReportVariableConfig = {
+          entityId: variable.entityId,
+          entityName: variable.entityName ||
+            this.displayEntity(variable.entityId),
+
+          key: variable.key,
+          enabled: variable.enabled !== false,
+
+          label: variable.label ||
+            this.defaultVariableLabel(variable.key),
+
+          unit: variable.unit ??
+            this.defaultVariableUnit(variable.key),
+
+          scale: variable.scale !== null &&
+              variable.scale !== undefined
+            ? Number(variable.scale)
+            : 1,
+
+          offset: variable.offset !== null &&
+              variable.offset !== undefined
+            ? Number(variable.offset)
+            : 0,
+
+          chartEnabled: variable.chartEnabled !== false,
+
+          tableEnabled: variable.tableEnabled !== false,
+
+          granularity: variable.granularity === "DAY" ||
+              variable.granularity === "WEEK" ||
+              variable.granularity === "MONTH"
+            ? variable.granularity
+            : "FULL",
+
+          stats: {
+            min: variable.stats?.min !== false,
+            max: variable.stats?.max !== false,
+            avg: variable.stats?.avg !== false,
+            count: variable.stats?.count !== false,
+
+            sum: variable.stats?.sum === true,
+            first: variable.stats?.first === true,
+            last: variable.stats?.last === true,
+            delta: variable.stats?.delta === true,
+          },
+
+          analysis: {
+            enabled: variable.analysis?.enabled === true,
+
+            expectedRange: {
+              enabled: variable.analysis?.expectedRange?.enabled === true,
+
+              min: variable.analysis?.expectedRange?.min !== null &&
+                  variable.analysis?.expectedRange?.min !== undefined
+                ? Number(variable.analysis.expectedRange.min)
+                : null,
+
+              max: variable.analysis?.expectedRange?.max !== null &&
+                  variable.analysis?.expectedRange?.max !== undefined
+                ? Number(variable.analysis.expectedRange.max)
+                : null,
+            },
+
+            warningRange: {
+              enabled: variable.analysis?.warningRange?.enabled === true,
+
+              min: variable.analysis?.warningRange?.min !== null &&
+                  variable.analysis?.warningRange?.min !== undefined
+                ? Number(variable.analysis.warningRange.min)
+                : null,
+
+              max: variable.analysis?.warningRange?.max !== null &&
+                  variable.analysis?.warningRange?.max !== undefined
+                ? Number(variable.analysis.warningRange.max)
+                : null,
+            },
+
+            performanceDirection:
+              variable.analysis?.performanceDirection === "HIGHER_IS_BETTER" ||
+                variable.analysis?.performanceDirection === "LOWER_IS_BETTER" ||
+                variable.analysis?.performanceDirection === "NEUTRAL"
+                ? variable.analysis.performanceDirection
+                : "TARGET_RANGE",
+
+            comparePreviousPeriod:
+              variable.analysis?.comparePreviousPeriod !== false,
+
+            detectTrend: variable.analysis?.detectTrend !== false,
+
+            detectOutliers: variable.analysis?.detectOutliers === true,
+
+            minimumCoveragePct:
+              variable.analysis?.minimumCoveragePct !== null &&
+                variable.analysis?.minimumCoveragePct !== undefined
+                ? Number(variable.analysis.minimumCoveragePct)
+                : 80,
+          },
+        };
+
+        variables.push(normalizedVariable);
+      });
+    });
+
+    const uniqueVariables = new Map<string, ReportVariableConfig>();
+
+    variables.forEach((variable) => {
+      const uniqueKey = `${this.entityUid(variable.entityId)}:${variable.key}`;
+
+      /*
+       * Las mismas variables se guardan en varias secciones.
+       * Conservamos una sola configuración por entidad y key.
+       */
+      if (!uniqueVariables.has(uniqueKey)) {
+        uniqueVariables.set(uniqueKey, variable);
       }
     });
 
-    const unique = new Map<string, ReportVariableConfig>();
-
-    variables.forEach((variable) => {
-      unique.set(
-        `${this.entityUid(variable.entityId)}:${variable.key}`,
-        variable,
-      );
-    });
-
-    return Array.from(unique.values());
+    return Array.from(uniqueVariables.values());
   }
 }

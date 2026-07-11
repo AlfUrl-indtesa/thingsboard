@@ -23,6 +23,8 @@ public class ReportVariableConfig {
 
     private String granularity = "FULL";
 
+    private ReportVariableAnalysisConfig analysis = new ReportVariableAnalysisConfig();
+
     private ReportVariableStatsConfig stats = new ReportVariableStatsConfig();
 
     @Data
@@ -35,5 +37,32 @@ public class ReportVariableConfig {
         private Boolean first = false;
         private Boolean last = false;
         private Boolean delta = false;
+
+    }
+
+    @Data
+    public static class ReportVariableAnalysisConfig {
+
+        private Boolean enabled = false;
+
+        private ReportVariableRangeConfig expectedRange = new ReportVariableRangeConfig();
+
+        private ReportVariableRangeConfig warningRange = new ReportVariableRangeConfig();
+
+        private String performanceDirection = "TARGET_RANGE";
+
+        private Boolean comparePreviousPeriod = true;
+        private Boolean detectTrend = true;
+        private Boolean detectOutliers = false;
+
+        private Double minimumCoveragePct = 80.0;
+    }
+
+    @Data
+    public static class ReportVariableRangeConfig {
+
+        private Boolean enabled = false;
+        private Double min;
+        private Double max;
     }
 }

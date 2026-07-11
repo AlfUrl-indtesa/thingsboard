@@ -25,6 +25,17 @@ export interface ReportBrandingConfig {
   textColor?: string;
   footerText?: string;
   footerLogoResourceKey?: string;
+  customerName?: string;
+  siteName?: string;
+
+  coverTitle?: string;
+  coverSubtitle?: string;
+
+  logoUrl?: string;
+  confidentialityText?: string;
+
+  showPageNumbers?: boolean;
+  showGeneratedDate?: boolean;
 }
 
 export interface ReportTimeRangeConfig {
@@ -136,6 +147,33 @@ export interface ReportVariableStatsConfig {
   delta: boolean;
 }
 
+export type ReportPerformanceDirection =
+  | "TARGET_RANGE"
+  | "HIGHER_IS_BETTER"
+  | "LOWER_IS_BETTER"
+  | "NEUTRAL";
+
+export interface ReportVariableRangeConfig {
+  enabled: boolean;
+  min: number | null;
+  max: number | null;
+}
+
+export interface ReportVariableAnalysisConfig {
+  enabled: boolean;
+
+  expectedRange: ReportVariableRangeConfig;
+  warningRange: ReportVariableRangeConfig;
+
+  performanceDirection: ReportPerformanceDirection;
+
+  comparePreviousPeriod: boolean;
+  detectTrend: boolean;
+  detectOutliers: boolean;
+
+  minimumCoveragePct: number;
+}
+
 export interface ReportVariableConfig {
   entityId: {
     entityType: string;
@@ -152,6 +190,7 @@ export interface ReportVariableConfig {
   tableEnabled: boolean;
   granularity: ReportChartGranularity;
   stats: ReportVariableStatsConfig;
+  analysis: ReportVariableAnalysisConfig;
 }
 
 export interface PageData<T> {

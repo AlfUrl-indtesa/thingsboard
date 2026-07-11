@@ -20,5 +20,17 @@ public class ReportBrandingConfig {
     private String footerText;
 
     private String footerLogoResourceKey;
-}
 
+    private String customerName;
+    private String siteName;
+
+    private String coverTitle;
+    private String coverSubtitle;
+
+    private String logoUrl;
+
+    private String confidentialityText;
+
+    private Boolean showPageNumbers = true;
+    private Boolean showGeneratedDate = true;
+}

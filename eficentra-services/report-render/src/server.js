@@ -15,14 +15,25 @@ app.post('/render-report', (req, res) => {
     try {
         const payload = req.body || {};
 
+        const branding = getBranding(payload);
+
         const doc = new PDFDocument({
             size: 'A4',
             margin: 42,
+            bufferPages: true,
             info: {
-                Title: payload?.meta?.templateName || 'Reporte Eficentra',
-                Author: 'Eficentra'
+                Title:
+                    branding.coverTitle ||
+                    payload?.meta?.templateName ||
+                    'Reporte Eficentra',
+
+                Author:
+                    branding.companyName ||
+                    'Eficentra'
             }
         });
+
+        doc._eficentraTheme = buildReportTheme(payload);
 
         const chunks = [];
 
@@ -41,6 +52,9 @@ app.post('/render-report', (req, res) => {
         renderExecutiveSummary(doc, payload);
         normalizePdfState(doc);
 
+        renderDataQuality(doc, payload);
+        normalizePdfState(doc);
+
         renderKpis(doc, payload);
         normalizePdfState(doc);
 
@@ -55,6 +69,9 @@ app.post('/render-report', (req, res) => {
 
         renderConclusion(doc, payload);
         normalizePdfState(doc);
+
+        renderPageFooters(doc, payload);
+
         doc.end();
     } catch (err) {
         console.error('Failed to render report:', err);
@@ -66,49 +83,247 @@ app.post('/render-report', (req, res) => {
 });
 
 function renderCover(doc, payload) {
-    const title = payload?.meta?.templateName || 'Reporte Eficentra';
-    const reportType = payload?.meta?.reportType || 'Reporte técnico';
-    const companyName = payload?.branding?.companyName || 'Eficentra';
-    const generatedAt = payload?.meta?.generatedAt || new Date().toISOString();
+    const branding = getBranding(payload);
+    const theme = getTheme(doc);
 
-    doc.rect(0, 0, doc.page.width, 130).fill('#0B2239');
-    doc.fillColor('#FFFFFF')
+    const primaryColor = theme.primaryColor;
+    const secondaryColor = theme.secondaryColor;
+    const primaryTextColor = contrastTextColor(primaryColor);
+
+    const title =
+        branding.coverTitle ||
+        payload?.meta?.templateName ||
+        'Reporte Eficentra';
+
+    const subtitle =
+        branding.coverSubtitle ||
+        payload?.meta?.reportType ||
+        'Reporte técnico';
+
+    const generatedAt =
+        payload?.meta?.generatedAt ||
+        new Date().toISOString();
+
+    const period = payload?.period || {};
+
+    const left = doc.page.margins.left;
+    const contentWidth =
+        doc.page.width -
+        doc.page.margins.left -
+        doc.page.margins.right;
+
+    /*
+     * Encabezado principal.
+     */
+    doc.rect(
+        0,
+        0,
+        doc.page.width,
+        148
+    ).fill(primaryColor);
+
+    doc.rect(
+        0,
+        140,
+        doc.page.width,
+        8
+    ).fill(secondaryColor);
+
+    doc.fillColor(primaryTextColor)
         .fontSize(26)
-        .text('Eficentra', 42, 42);
-
-    doc.fontSize(12)
-        .fillColor('#B9D8F2')
-        .text('Sistema de monitoreo y análisis operativo', 42, 78);
-
-    doc.fillColor('#111111');
-    doc.moveDown(6);
-
-    doc.fontSize(24)
-        .text(title, 42, 170, { width: 500 });
-
-    doc.moveDown();
-    doc.fontSize(13)
-        .fillColor('#444444')
-        .text(reportType);
-
-    doc.moveDown(2);
+        .text(
+            safeText(branding.companyName || 'Eficentra', 55),
+            left,
+            38,
+            {
+                width: contentWidth,
+                lineBreak: false
+            }
+        );
 
     doc.fontSize(11)
-        .fillColor('#222222')
-        .text(`Empresa: ${companyName}`)
-        .text(`Generado: ${formatIsoDate(generatedAt)}`);
+        .fillColor(primaryTextColor)
+        .text(
+            safeText(
+                branding.siteName ||
+                'Sistema de monitoreo y análisis operativo',
+                90
+            ),
+            left,
+            79,
+            {
+                width: contentWidth,
+                lineBreak: false
+            }
+        );
 
-    const period = payload.period || {};
-    if (period.startTs && period.endTs) {
-        doc.text(`Periodo: ${formatTimestamp(period.startTs)} - ${formatTimestamp(period.endTs)}`);
+    /*
+     * Título y subtítulo.
+     */
+    doc.fillColor('#111111')
+        .fontSize(24)
+        .text(
+            safeText(title, 150),
+            left,
+            184,
+            {
+                width: contentWidth,
+                lineGap: 4
+            }
+        );
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(13)
+        .fillColor('#4F5D6B')
+        .text(
+            safeText(subtitle, 140),
+            left,
+            doc.y,
+            {
+                width: contentWidth,
+                lineGap: 3
+            }
+        );
+
+    /*
+     * Línea decorativa.
+     */
+    const dividerY = doc.y + 28;
+
+    doc.moveTo(left, dividerY)
+        .lineTo(
+            doc.page.width - doc.page.margins.right,
+            dividerY
+        )
+        .strokeColor(secondaryColor)
+        .lineWidth(2)
+        .stroke();
+
+    /*
+     * Información principal.
+     */
+    let detailY = dividerY + 30;
+
+    const detailRows = [];
+
+    if (branding.customerName) {
+        detailRows.push([
+            'Cliente',
+            branding.customerName
+        ]);
     }
 
-    doc.moveDown(6);
-    doc.fontSize(10)
-        .fillColor('#666666')
-        .text(payload?.branding?.footerText || 'Reporte generado por Eficentra');
+    if (branding.siteName) {
+        detailRows.push([
+            'Planta o instalación',
+            branding.siteName
+        ]);
+    }
 
+    detailRows.push([
+        'Empresa responsable',
+        branding.companyName || 'Eficentra'
+    ]);
+
+    if (
+        branding.showGeneratedDate &&
+        generatedAt
+    ) {
+        detailRows.push([
+            'Fecha de generación',
+            formatIsoDate(generatedAt)
+        ]);
+    }
+
+    if (period.startTs && period.endTs) {
+        detailRows.push([
+            'Periodo analizado',
+            `${formatTimestamp(period.startTs)} - ${formatTimestamp(period.endTs)}`
+        ]);
+    }
+
+    detailRows.forEach(([label, value]) => {
+        doc.fontSize(9)
+            .fillColor('#697887')
+            .text(
+                label,
+                left,
+                detailY,
+                {
+                    width: 125,
+                    lineBreak: false
+                }
+            );
+
+        doc.fontSize(10)
+            .fillColor('#222222')
+            .text(
+                safeText(value, 115),
+                left + 135,
+                detailY,
+                {
+                    width: contentWidth - 135,
+                    lineBreak: false
+                }
+            );
+
+        detailY += 26;
+    });
+
+    /*
+     * Pie visual de portada.
+     */
+    const coverFooterY =
+        doc.page.height -
+        doc.page.margins.bottom -
+        70;
+
+    doc.moveTo(left, coverFooterY)
+        .lineTo(
+            doc.page.width - doc.page.margins.right,
+            coverFooterY
+        )
+        .strokeColor('#DCE6EF')
+        .lineWidth(1)
+        .stroke();
+
+    if (branding.footerText) {
+        doc.fontSize(9)
+            .fillColor('#4F5D6B')
+            .text(
+                safeText(branding.footerText, 130),
+                left,
+                coverFooterY + 14,
+                {
+                    width: contentWidth,
+                    align: 'left'
+                }
+            );
+    }
+
+    if (branding.confidentialityText) {
+        doc.fontSize(7)
+            .fillColor('#778491')
+            .text(
+                safeText(
+                    branding.confidentialityText,
+                    150
+                ),
+                left,
+                coverFooterY + 36,
+                {
+                    width: contentWidth,
+                    align: 'left'
+                }
+            );
+    }
+
+    /*
+     * La portada no lleva numeración.
+     */
     doc.addPage();
+    normalizePdfState(doc);
 }
 
 function renderExecutiveSummary(doc, payload) {
@@ -308,8 +523,8 @@ function renderKpis(doc, payload) {
         doc.roundedRect(x, y, cardWidth, cardHeight, 8)
             .fillAndStroke('#F5F8FB', '#DCE6EF');
 
-        doc.fillColor('#5B6B7A')
-            .fontSize(8)
+        doc.fillColor(getTheme(doc).primaryColor)
+            .fontSize(18)
             .text(kpi.label || kpi.key || 'KPI', x + 10, y + 10, {
                 width: cardWidth - 20,
                 height: 20
@@ -377,7 +592,7 @@ function renderTable(doc, columns, rows) {
 
     let y = doc.y;
 
-    doc.rect(startX, y, tableWidth, rowHeight).fill('#0B2239');
+    doc.rect(startX, y, tableWidth, rowHeight).fill(getTheme(doc).primaryColor);
 
     let x = startX;
     columns.forEach((col, i) => {
@@ -398,7 +613,7 @@ function renderTable(doc, columns, rows) {
             doc.addPage();
             y = doc.y;
 
-            doc.rect(startX, y, tableWidth, rowHeight).fill('#0B2239');
+            doc.rect(startX, y, tableWidth, rowHeight).fill(getTheme(doc).primaryColor);;
 
             let headerX = startX;
             columns.forEach((col, i) => {
@@ -739,7 +954,7 @@ function renderCombinedChartsPage(doc, series, periodLabel) {
 }
 
 function drawNormalizedCombinedLineChart(doc, series, box) {
-    const colors = getChartColors();
+    const colors = getChartColors(doc);
 
     const normalizedSeries = series.map(item => {
         const points = (item.points || [])
@@ -820,7 +1035,7 @@ function drawNormalizedCombinedLineChart(doc, series, box) {
 }
 
 function renderCombinedLegend(doc, series) {
-    const colors = getChartColors();
+    const colors = getChartColors(doc);
 
     const startX = doc.page.margins.left;
     let x = startX;
@@ -888,10 +1103,12 @@ function renderCombinedSeriesStatsTable(doc, series) {
     renderCompactTable(doc, columns, rows);
 }
 
-function getChartColors() {
-    return [
-        '#1B8DD0',
-        '#00BCD4',
+function getChartColors(doc) {
+    const theme = getTheme(doc);
+
+    const colors = [
+        theme.primaryColor,
+        theme.secondaryColor,
         '#3656B0',
         '#4CAF50',
         '#FF9800',
@@ -899,6 +1116,14 @@ function getChartColors() {
         '#F44336',
         '#607D8B'
     ];
+
+    /*
+     * Evita colores repetidos cuando el usuario
+     * elige colores iguales o similares.
+     */
+    return Array.from(
+        new Set(colors)
+    );
 }
 
 function renderCompactTable(doc, columns, rows) {
@@ -1005,7 +1230,7 @@ function drawLineChart(doc, points, box) {
         doc.lineTo(chartPoints[i].x, chartPoints[i].y);
     }
 
-    doc.strokeColor('#1B8DD0')
+    doc.strokeColor(getTheme(doc).primaryColor)
         .lineWidth(1.5)
         .stroke();
 
@@ -1063,7 +1288,7 @@ function renderObservations(doc, payload) {
         const bulletY = doc.y;
 
         doc.fontSize(9)
-            .fillColor('#1B8DD0')
+            .fillColor(getTheme(doc).primaryColor)
             .text(`${index + 1}.`, left, bulletY, {
                 width: 20,
                 lineBreak: false
@@ -1170,6 +1395,268 @@ function renderConclusion(doc, payload) {
     normalizePdfState(doc);
 }
 
+function getBranding(payload) {
+    const source = payload?.branding || {};
+
+    return {
+        companyName:
+            source.companyName ||
+            'Eficentra',
+
+        customerName:
+            source.customerName ||
+            '',
+
+        siteName:
+            source.siteName ||
+            '',
+
+        coverTitle:
+            source.coverTitle ||
+            '',
+
+        coverSubtitle:
+            source.coverSubtitle ||
+            '',
+
+        logoUrl:
+            source.logoUrl ||
+            '',
+
+        primaryColor:
+            normalizeHexColor(
+                source.primaryColor,
+                '#1B8DD0'
+            ),
+
+        secondaryColor:
+            normalizeHexColor(
+                source.secondaryColor,
+                '#00BCD4'
+            ),
+
+        footerText:
+            source.footerText ||
+            'Reporte generado por Eficentra',
+
+        confidentialityText:
+            source.confidentialityText ||
+            '',
+
+        showPageNumbers:
+            source.showPageNumbers !== false,
+
+        showGeneratedDate:
+            source.showGeneratedDate !== false
+    };
+}
+
+function buildReportTheme(payload) {
+    const branding = getBranding(payload);
+
+    return {
+        primaryColor: branding.primaryColor,
+        secondaryColor: branding.secondaryColor,
+        primaryTextColor:
+            contrastTextColor(
+                branding.primaryColor
+            )
+    };
+}
+
+function getTheme(doc) {
+    return doc?._eficentraTheme || {
+        primaryColor: '#1B8DD0',
+        secondaryColor: '#00BCD4',
+        primaryTextColor: '#FFFFFF'
+    };
+}
+
+function normalizeHexColor(value, fallback) {
+    const color = String(value || '').trim();
+
+    if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+        return color.toUpperCase();
+    }
+
+    if (/^#[0-9A-Fa-f]{3}$/.test(color)) {
+        return (
+            '#' +
+            color
+                .substring(1)
+                .split('')
+                .map(character => character + character)
+                .join('')
+        ).toUpperCase();
+    }
+
+    return fallback;
+}
+
+function contrastTextColor(hexColor) {
+    const normalized =
+        normalizeHexColor(hexColor, '#1B8DD0')
+            .substring(1);
+
+    const red =
+        parseInt(normalized.substring(0, 2), 16);
+
+    const green =
+        parseInt(normalized.substring(2, 4), 16);
+
+    const blue =
+        parseInt(normalized.substring(4, 6), 16);
+
+    const luminance =
+        (
+            red * 299 +
+            green * 587 +
+            blue * 114
+        ) / 1000;
+
+    return luminance >= 155
+        ? '#111111'
+        : '#FFFFFF';
+}
+
+function renderPageFooters(doc, payload) {
+    const branding = getBranding(payload);
+    const theme = getTheme(doc);
+
+    const pageRange = doc.bufferedPageRange();
+
+    if (!pageRange || pageRange.count <= 1) {
+        return;
+    }
+
+    /*
+     * La primera página es la portada y no se numera.
+     */
+    const firstContentPage =
+        pageRange.start + 1;
+
+    const lastPageExclusive =
+        pageRange.start + pageRange.count;
+
+    const totalContentPages =
+        pageRange.count - 1;
+
+    const generatedAt =
+        payload?.meta?.generatedAt ||
+        new Date().toISOString();
+
+    for (
+        let pageIndex = firstContentPage;
+        pageIndex < lastPageExclusive;
+        pageIndex++
+    ) {
+        doc.switchToPage(pageIndex);
+
+        const pageNumber =
+            pageIndex - firstContentPage + 1;
+
+        const left =
+            doc.page.margins.left;
+
+        const width =
+            doc.page.width -
+            doc.page.margins.left -
+            doc.page.margins.right;
+
+        const footerLineY =
+            doc.page.height -
+            doc.page.margins.bottom +
+            5;
+
+        const footerTextY =
+            footerLineY + 9;
+
+        doc.moveTo(left, footerLineY)
+            .lineTo(
+                doc.page.width -
+                doc.page.margins.right,
+                footerLineY
+            )
+            .strokeColor(theme.secondaryColor)
+            .lineWidth(0.7)
+            .stroke();
+
+        const columnWidth = width / 3;
+
+        const leftText =
+            branding.confidentialityText ||
+            '';
+
+        const centerParts = [];
+
+        if (branding.footerText) {
+            centerParts.push(
+                branding.footerText
+            );
+        }
+
+        if (branding.showGeneratedDate) {
+            centerParts.push(
+                formatIsoDate(generatedAt)
+            );
+        }
+
+        const centerText =
+            centerParts.join(' · ');
+
+        const rightText =
+            branding.showPageNumbers
+                ? `Página ${pageNumber} de ${totalContentPages}`
+                : '';
+
+        doc.fontSize(6.5)
+            .fillColor('#687582')
+            .text(
+                safeText(leftText, 55),
+                left,
+                footerTextY,
+                {
+                    width: columnWidth - 6,
+                    align: 'left',
+                    lineBreak: false
+                }
+            );
+
+        doc.fontSize(6.5)
+            .fillColor('#687582')
+            .text(
+                safeText(centerText, 68),
+                left + columnWidth,
+                footerTextY,
+                {
+                    width: columnWidth,
+                    align: 'center',
+                    lineBreak: false
+                }
+            );
+
+        doc.fontSize(6.5)
+            .fillColor('#687582')
+            .text(
+                rightText,
+                left + columnWidth * 2 + 6,
+                footerTextY,
+                {
+                    width: columnWidth - 6,
+                    align: 'right',
+                    lineBreak: false
+                }
+            );
+    }
+
+    /*
+     * Regresa a la última página antes de cerrar.
+     */
+    doc.switchToPage(
+        lastPageExclusive - 1
+    );
+}
+
 function sectionTitle(doc, title) {
     resetCursor(doc);
     ensureSpace(doc, 90);
@@ -1179,7 +1666,7 @@ function sectionTitle(doc, title) {
     resetCursor(doc);
 
     doc.fontSize(16)
-        .fillColor('#0B2239')
+        .fillColor(getTheme(doc).primaryColor)
         .text(title, doc.page.margins.left, doc.y, {
             width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
             align: 'left',
@@ -1190,7 +1677,7 @@ function sectionTitle(doc, title) {
 
     doc.moveTo(doc.page.margins.left, lineY)
         .lineTo(doc.page.width - doc.page.margins.right, lineY)
-        .strokeColor('#DCE6EF')
+        .strokeColor(getTheme(doc).secondaryColor)
         .stroke();
 
     doc.y = lineY + 12;

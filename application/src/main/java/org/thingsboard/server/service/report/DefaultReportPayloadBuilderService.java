@@ -30,6 +30,10 @@ public class DefaultReportPayloadBuilderService implements ReportPayloadBuilderS
         root.set("meta", buildMeta(reportTemplate));
         root.set("period", buildPeriod(request));
         root.set("branding", buildBranding(reportTemplate));
+        root.set(
+                "sections",
+                objectMapper.valueToTree(
+                        reportTemplate.getSections()));
         root.set("context", buildContext(reportTemplate, dataResult));
         root.set("summary", buildSummary(dataResult));
         root.set("data", buildData(dataResult));

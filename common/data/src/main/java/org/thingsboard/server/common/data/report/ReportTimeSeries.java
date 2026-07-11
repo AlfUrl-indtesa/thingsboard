@@ -1,3 +1,8 @@
+/**
+ * Copyright © 2016-2026 The Thingsboard Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ */
 package org.thingsboard.server.common.data.report;
 
 import lombok.Data;
@@ -23,6 +28,17 @@ public class ReportTimeSeries {
     private Long startTs;
     private Long endTs;
 
-    private List<ReportMetricPoint> points = new ArrayList<>();
-}
+    /**
+     * Periodo inmediatamente anterior al periodo principal.
+     */
+    private Long previousStartTs;
+    private Long previousEndTs;
 
+    private List<ReportMetricPoint> points = new ArrayList<>();
+
+    /**
+     * Muestras del periodo anterior, ya convertidas con el mismo
+     * scale y offset configurados para la variable.
+     */
+    private List<ReportMetricPoint> previousPoints = new ArrayList<>();
+}

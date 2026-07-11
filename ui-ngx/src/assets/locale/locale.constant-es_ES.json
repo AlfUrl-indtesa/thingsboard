@@ -178,7 +178,12 @@
     "secondary_color": "Color secundario",
     "confidentiality_text": "Texto de confidencialidad",
     "show_page_numbers": "Mostrar número de página",
-    "show_generated_date": "Mostrar fecha de generación"
+    "show_generated_date": "Mostrar fecha de generación",
+    "stat_sum": "Suma",
+    "stat_first": "Primer valor",
+    "stat_last": "Último valor",
+    "stat_delta": "Variación",
+    "name_required": "El nombre es obligatorio"
   },
   "action": {
     "activate": "Activar",

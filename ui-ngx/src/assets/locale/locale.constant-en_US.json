@@ -178,7 +178,12 @@
         "secondary_color": "Secondary color",
         "confidentiality_text": "Confidentiality text",
         "show_page_numbers": "Show page numbers",
-        "show_generated_date": "Show generation date"
+        "show_generated_date": "Show generation date",
+        "stat_sum": "Sum",
+        "stat_first": "First value",
+        "stat_last": "Last value",
+        "stat_delta": "Change",
+        "name_required": "Name is required"
     },
     "action": {
         "activate": "Activate",

@@ -1,5 +1,8 @@
 const express = require('express');
 const PDFDocument = require('pdfkit');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -11,9 +14,13 @@ app.get('/health', (req, res) => {
     });
 });
 
-app.post('/render-report', (req, res) => {
+app.post('/render-report', async (req, res) => {
     try {
         const payload = req.body || {};
+
+        payload._logoBuffer = await loadLogoBuffer(
+            payload?.branding?.logoUrl
+        );
 
         const branding = getBranding(payload);
 
@@ -82,6 +89,289 @@ app.post('/render-report', (req, res) => {
     }
 });
 
+async function loadLogoBuffer(value) {
+    const rawValue = String(value || '').trim();
+
+    if (!rawValue) {
+        return null;
+    }
+
+    try {
+        if (rawValue.startsWith('data:image/')) {
+            return parseLogoDataUri(rawValue);
+        }
+
+        const baseUrl =
+            process.env.REPORT_PUBLIC_BASE_URL ||
+            'https://eficentra.indtesa.com';
+
+        const url = new URL(rawValue, baseUrl);
+
+        validateLogoUrl(url);
+
+        return await downloadLogoBuffer(url, 0);
+    } catch (error) {
+        console.warn(
+            '[report-render] No fue posible cargar el logotipo:',
+            error.message
+        );
+
+        return null;
+    }
+}
+
+function parseLogoDataUri(value) {
+    const match = value.match(
+        /^data:image\/(png|jpeg|jpg);base64,(.+)$/i
+    );
+
+    if (!match) {
+        throw new Error(
+            'El logotipo embebido debe ser PNG o JPG.'
+        );
+    }
+
+    const buffer = Buffer.from(match[2], 'base64');
+
+    validateLogoBuffer(buffer);
+
+    return buffer;
+}
+
+function validateLogoUrl(url) {
+    if (
+        url.protocol !== 'http:' &&
+        url.protocol !== 'https:'
+    ) {
+        throw new Error(
+            'El protocolo del logotipo no está permitido.'
+        );
+    }
+
+    const allowedHosts = new Set(
+        (
+            process.env.ALLOWED_LOGO_HOSTS ||
+            [
+                'eficentra.indtesa.com',
+                'indtesa.com',
+                '127.0.0.1',
+                'localhost'
+            ].join(',')
+        )
+            .split(',')
+            .map(host => host.trim().toLowerCase())
+            .filter(Boolean)
+    );
+
+    if (!allowedHosts.has(url.hostname.toLowerCase())) {
+        throw new Error(
+            `Host no permitido para el logotipo: ${url.hostname}`
+        );
+    }
+}
+
+function downloadLogoBuffer(url, redirectCount) {
+    return new Promise((resolve, reject) => {
+        if (redirectCount > 3) {
+            reject(
+                new Error('Demasiadas redirecciones.')
+            );
+            return;
+        }
+
+        const client =
+            url.protocol === 'https:'
+                ? https
+                : http;
+
+        const request = client.get(
+            url,
+            {
+                headers: {
+                    'User-Agent':
+                        'Eficentra-report-render/1.0',
+
+                    Accept:
+                        'image/png,image/jpeg'
+                }
+            },
+            response => {
+                const statusCode =
+                    response.statusCode || 0;
+
+                if (
+                    statusCode >= 300 &&
+                    statusCode < 400 &&
+                    response.headers.location
+                ) {
+                    response.resume();
+
+                    const redirectUrl = new URL(
+                        response.headers.location,
+                        url
+                    );
+
+                    try {
+                        validateLogoUrl(redirectUrl);
+                    } catch (error) {
+                        reject(error);
+                        return;
+                    }
+
+                    downloadLogoBuffer(
+                        redirectUrl,
+                        redirectCount + 1
+                    )
+                        .then(resolve)
+                        .catch(reject);
+
+                    return;
+                }
+
+                if (statusCode !== 200) {
+                    response.resume();
+
+                    reject(
+                        new Error(
+                            `HTTP ${statusCode} al descargar el logotipo.`
+                        )
+                    );
+
+                    return;
+                }
+
+                const chunks = [];
+                let totalBytes = 0;
+                const maximumBytes =
+                    3 * 1024 * 1024;
+
+                response.on('data', chunk => {
+                    totalBytes += chunk.length;
+
+                    if (totalBytes > maximumBytes) {
+                        request.destroy(
+                            new Error(
+                                'El logotipo supera 3 MB.'
+                            )
+                        );
+
+                        return;
+                    }
+
+                    chunks.push(chunk);
+                });
+
+                response.on('end', () => {
+                    try {
+                        const buffer =
+                            Buffer.concat(chunks);
+
+                        validateLogoBuffer(buffer);
+
+                        resolve(buffer);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+
+                response.on('error', reject);
+            }
+        );
+
+        request.setTimeout(7000, () => {
+            request.destroy(
+                new Error(
+                    'Tiempo agotado al descargar el logotipo.'
+                )
+            );
+        });
+
+        request.on('error', reject);
+    });
+}
+
+function validateLogoBuffer(buffer) {
+    if (!buffer || buffer.length < 4) {
+        throw new Error(
+            'El archivo del logotipo está vacío.'
+        );
+    }
+
+    const isPng =
+        buffer[0] === 0x89 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x4E &&
+        buffer[3] === 0x47;
+
+    const isJpeg =
+        buffer[0] === 0xFF &&
+        buffer[1] === 0xD8 &&
+        buffer[2] === 0xFF;
+
+    if (!isPng && !isJpeg) {
+        throw new Error(
+            'El logotipo debe ser PNG o JPG.'
+        );
+    }
+}
+
+function renderCoverLogo(doc, payload) {
+    const logoBuffer = payload?._logoBuffer;
+
+    if (!Buffer.isBuffer(logoBuffer)) {
+        return false;
+    }
+
+    const boxWidth = 128;
+    const boxHeight = 72;
+
+    const x =
+        doc.page.width -
+        doc.page.margins.right -
+        boxWidth;
+
+    const y = 30;
+
+    try {
+        doc.roundedRect(
+            x,
+            y,
+            boxWidth,
+            boxHeight,
+            6
+        )
+            .fillOpacity(0.96)
+            .fill('#FFFFFF');
+
+        doc.fillOpacity(1);
+
+        doc.image(
+            logoBuffer,
+            x + 8,
+            y + 8,
+            {
+                fit: [
+                    boxWidth - 16,
+                    boxHeight - 16
+                ],
+                align: 'center',
+                valign: 'center'
+            }
+        );
+
+        return true;
+    } catch (error) {
+        doc.fillOpacity(1);
+
+        console.warn(
+            '[report-render] Error dibujando logotipo:',
+            error.message
+        );
+
+        return false;
+    }
+}
+
 function renderCover(doc, payload) {
     const branding = getBranding(payload);
     const theme = getTheme(doc);
@@ -89,6 +379,9 @@ function renderCover(doc, payload) {
     const primaryColor = theme.primaryColor;
     const secondaryColor = theme.secondaryColor;
     const primaryTextColor = contrastTextColor(primaryColor);
+
+    const logoRendered =
+        renderCoverLogo(doc, payload);
 
     const title =
         branding.coverTitle ||
@@ -99,6 +392,8 @@ function renderCover(doc, payload) {
         branding.coverSubtitle ||
         payload?.meta?.reportType ||
         'Reporte técnico';
+
+
 
     const generatedAt =
         payload?.meta?.generatedAt ||
@@ -111,6 +406,26 @@ function renderCover(doc, payload) {
         doc.page.width -
         doc.page.margins.left -
         doc.page.margins.right;
+
+    const companyTextWidth =
+        logoRendered
+            ? contentWidth - 155
+            : contentWidth;
+
+    doc.fillColor(primaryTextColor)
+        .fontSize(26)
+        .text(
+            safeText(
+                branding.companyName || 'Eficentra',
+                55
+            ),
+            left,
+            38,
+            {
+                width: companyTextWidth,
+                lineBreak: false
+            }
+        );
 
     /*
      * Encabezado principal.
@@ -1256,7 +1571,28 @@ function cleanObservation(text, payload) {
 }
 
 function renderObservations(doc, payload) {
-    const observations = payload?.summary?.observations || payload?.data?.observations || [];
+    const suppliedObservations =
+        payload?.summary?.observations ||
+        payload?.data?.observations ||
+        [];
+
+    const suppliedTexts =
+        suppliedObservations
+            .map(observation =>
+                typeof observation === 'string'
+                    ? observation
+                    : observation?.text
+            )
+            .filter(Boolean);
+
+    const advancedAnalysis =
+        getAdvancedAnalysis(payload);
+
+    const observations =
+        deduplicateTexts([
+            ...suppliedTexts,
+            ...advancedAnalysis.observations
+        ]);
 
     if (!observations.length) {
         return;
@@ -1309,66 +1645,819 @@ function renderObservations(doc, payload) {
     normalizePdfState(doc);
 }
 
-function buildAutomaticObservations(payload) {
+function getAdvancedAnalysis(payload) {
+    if (payload?._advancedAnalysisResult) {
+        return payload._advancedAnalysisResult;
+    }
+
+    const results = [];
     const observations = [];
-    const series = payload?.data?.timeSeries || [];
+    const series =
+        payload?.data?.timeSeries || [];
 
     series.forEach(item => {
-        const points = (item.points || [])
-            .filter(point => point && Number.isFinite(Number(point.value)))
-            .map(point => ({
-                ts: Number(point.ts),
-                value: Number(point.value)
-            }));
+        const variable =
+            findVariableConfigForSeries(
+                payload,
+                item
+            );
 
-        const label = item.label || item.key || 'Variable';
-        const unit = item.unit ? ` ${item.unit}` : '';
-        const entityName = item.entityName || 'la entidad seleccionada';
+        const config =
+            variable?.analysis;
 
-        if (!points.length) {
-            observations.push(`La variable ${label} no presentó datos en el periodo seleccionado para ${entityName}.`);
+        if (!config || config.enabled !== true) {
             return;
         }
 
-        const values = points.map(point => point.value);
-        const min = Math.min(...values);
-        const max = Math.max(...values);
-        const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-
-        observations.push(
-            `La variable ${label} registró ${points.length} muestra(s) para ${entityName}. ` +
-            `Promedio: ${formatNumber(avg)}${unit}, mínimo: ${formatNumber(min)}${unit}, máximo: ${formatNumber(max)}${unit}.`
-        );
-
-        if (points.length < 20) {
-            observations.push(
-                `La variable ${label} tiene baja cantidad de muestras. Conviene revisar la frecuencia de envío o ampliar el periodo analizado.`
+        const result =
+            analyzeConfiguredSeries(
+                payload,
+                item,
+                variable,
+                config
             );
-        }
 
-        if (avg !== 0 && Math.abs(max - avg) / Math.abs(avg) > 0.25) {
-            observations.push(
-                `La variable ${label} presentó picos relevantes respecto a su promedio.`
-            );
-        }
+        results.push(result);
 
-        if (avg !== 0 && Math.abs(avg - min) / Math.abs(avg) > 0.25) {
-            observations.push(
-                `La variable ${label} presentó caídas relevantes respecto a su promedio.`
-            );
+        const observation =
+            formatAdvancedObservation(result);
+
+        if (observation) {
+            observations.push(observation);
         }
     });
 
-    return observations;
+    const analysisResult = {
+        results,
+        observations,
+        conclusion:
+            buildAdvancedConclusion(results)
+    };
+
+    payload._advancedAnalysisResult =
+        analysisResult;
+
+    return analysisResult;
+}
+
+function analyzeConfiguredSeries(
+    payload,
+    item,
+    variable,
+    config
+) {
+    const points =
+        normalizeAnalysisPoints(item?.points);
+
+    const label =
+        variable?.label ||
+        item?.label ||
+        item?.key ||
+        'Variable';
+
+    const entityName =
+        variable?.entityName ||
+        item?.entityName ||
+        'Entidad';
+
+    const unit =
+        variable?.unit ||
+        item?.unit ||
+        '';
+
+    const minimumCoverage =
+        clampNumber(
+            config.minimumCoveragePct,
+            0,
+            100,
+            80
+        );
+
+    if (!points.length) {
+        return {
+            label,
+            entityName,
+            unit,
+            status: 'NO_DATA',
+            points: 0,
+            minimumCoverage
+        };
+    }
+
+    const stats =
+        calculateStats(points);
+
+    const coverage =
+        estimateSeriesCoverage(
+            points,
+            payload?.period
+        );
+
+    const expectedRange =
+        config.expectedRange?.enabled === true
+            ? evaluateRange(
+                points,
+                config.expectedRange
+            )
+            : null;
+
+    const warningRange =
+        config.warningRange?.enabled === true
+            ? evaluateRange(
+                points,
+                config.warningRange
+            )
+            : null;
+
+    const trend =
+        config.detectTrend === true
+            ? calculateSeriesTrend(points)
+            : null;
+
+    const outliers =
+        config.detectOutliers === true
+            ? calculateIqrOutliers(points)
+            : null;
+
+    const previousPoints =
+        config.comparePreviousPeriod === true
+            ? findPreviousSeriesPoints(
+                payload,
+                item
+            )
+            : [];
+
+    const previousComparison =
+        previousPoints.length
+            ? compareSeriesAverages(
+                points,
+                previousPoints
+            )
+            : null;
+
+    let status = 'OK';
+
+    if (coverage.pct < minimumCoverage) {
+        status = 'ATTENTION';
+    }
+
+    if (expectedRange) {
+        if (expectedRange.insidePct < 80) {
+            status = 'CRITICAL';
+        } else if (
+            expectedRange.insidePct < 95 &&
+            status !== 'CRITICAL'
+        ) {
+            status = 'ATTENTION';
+        }
+    }
+
+    if (
+        warningRange &&
+        warningRange.outsideCount > 0
+    ) {
+        status = 'CRITICAL';
+    }
+
+    if (
+        outliers &&
+        outliers.count >
+        Math.max(
+            3,
+            Math.ceil(points.length * 0.05)
+        ) &&
+        status === 'OK'
+    ) {
+        status = 'ATTENTION';
+    }
+
+    return {
+        label,
+        entityName,
+        unit,
+        status,
+        points: points.length,
+        stats,
+        coverage,
+        minimumCoverage,
+        expectedRange,
+        warningRange,
+        trend,
+        outliers,
+        previousComparison,
+        performanceDirection:
+            config.performanceDirection ||
+            'TARGET_RANGE'
+    };
+}
+
+function normalizeAnalysisPoints(points) {
+    return (points || [])
+        .filter(point =>
+            point &&
+            Number.isFinite(Number(point.ts)) &&
+            Number.isFinite(Number(point.value))
+        )
+        .map(point => ({
+            ts: Number(point.ts),
+            value: Number(point.value)
+        }))
+        .sort((a, b) => a.ts - b.ts);
+}
+
+function evaluateRange(points, range) {
+    const minimum =
+        toFiniteNumber(range?.min);
+
+    const maximum =
+        toFiniteNumber(range?.max);
+
+    if (minimum === null && maximum === null) {
+        return null;
+    }
+
+    let insideCount = 0;
+
+    points.forEach(point => {
+        const aboveMinimum =
+            minimum === null ||
+            point.value >= minimum;
+
+        const belowMaximum =
+            maximum === null ||
+            point.value <= maximum;
+
+        if (aboveMinimum && belowMaximum) {
+            insideCount++;
+        }
+    });
+
+    const outsideCount =
+        points.length - insideCount;
+
+    return {
+        minimum,
+        maximum,
+        insideCount,
+        outsideCount,
+        insidePct:
+            points.length
+                ? insideCount /
+                points.length *
+                100
+                : 0
+    };
+}
+
+function estimateSeriesCoverage(points, period) {
+    if (!points.length) {
+        return {
+            pct: 0,
+            expectedSamples: 0,
+            actualSamples: 0,
+            estimatedIntervalMs: null
+        };
+    }
+
+    if (points.length === 1) {
+        return {
+            pct: 100,
+            expectedSamples: 1,
+            actualSamples: 1,
+            estimatedIntervalMs: null
+        };
+    }
+
+    const intervals = [];
+
+    for (let index = 1; index < points.length; index++) {
+        const delta =
+            points[index].ts -
+            points[index - 1].ts;
+
+        if (delta > 0) {
+            intervals.push(delta);
+        }
+    }
+
+    const estimatedInterval =
+        median(intervals);
+
+    if (
+        !Number.isFinite(estimatedInterval) ||
+        estimatedInterval <= 0
+    ) {
+        return {
+            pct: 100,
+            expectedSamples: points.length,
+            actualSamples: points.length,
+            estimatedIntervalMs: null
+        };
+    }
+
+    const startTs =
+        Number(period?.startTs) ||
+        points[0].ts;
+
+    const endTs =
+        Number(period?.endTs) ||
+        points[points.length - 1].ts;
+
+    const duration =
+        Math.max(0, endTs - startTs);
+
+    const expectedSamples =
+        Math.max(
+            1,
+            Math.floor(
+                duration / estimatedInterval
+            ) + 1
+        );
+
+    const pct =
+        Math.min(
+            100,
+            points.length /
+            expectedSamples *
+            100
+        );
+
+    return {
+        pct,
+        expectedSamples,
+        actualSamples: points.length,
+        estimatedIntervalMs:
+            estimatedInterval
+    };
+}
+
+function calculateSeriesTrend(points) {
+    if (points.length < 2) {
+        return null;
+    }
+
+    const startTs = points[0].ts;
+
+    const values = points.map(point => ({
+        x: (point.ts - startTs) / 1000,
+        y: point.value
+    }));
+
+    const count = values.length;
+
+    const meanX =
+        values.reduce(
+            (sum, point) => sum + point.x,
+            0
+        ) / count;
+
+    const meanY =
+        values.reduce(
+            (sum, point) => sum + point.y,
+            0
+        ) / count;
+
+    let numerator = 0;
+    let denominator = 0;
+
+    values.forEach(point => {
+        numerator +=
+            (point.x - meanX) *
+            (point.y - meanY);
+
+        denominator +=
+            Math.pow(point.x - meanX, 2);
+    });
+
+    const slope =
+        denominator !== 0
+            ? numerator / denominator
+            : 0;
+
+    const durationSeconds =
+        values[values.length - 1].x;
+
+    const projectedChange =
+        slope * durationSeconds;
+
+    const changePct =
+        meanY !== 0
+            ? projectedChange /
+            Math.abs(meanY) *
+            100
+            : null;
+
+    let direction = 'STABLE';
+
+    if (
+        changePct !== null &&
+        changePct > 2
+    ) {
+        direction = 'RISING';
+    } else if (
+        changePct !== null &&
+        changePct < -2
+    ) {
+        direction = 'FALLING';
+    }
+
+    return {
+        direction,
+        slopePerSecond: slope,
+        projectedChange,
+        changePct
+    };
+}
+
+function calculateIqrOutliers(points) {
+    if (points.length < 4) {
+        return {
+            count: 0,
+            lowerLimit: null,
+            upperLimit: null
+        };
+    }
+
+    const values = points
+        .map(point => point.value)
+        .sort((a, b) => a - b);
+
+    const q1 = quantile(values, 0.25);
+    const q3 = quantile(values, 0.75);
+    const iqr = q3 - q1;
+
+    const lowerLimit =
+        q1 - 1.5 * iqr;
+
+    const upperLimit =
+        q3 + 1.5 * iqr;
+
+    const count =
+        values.filter(value =>
+            value < lowerLimit ||
+            value > upperLimit
+        ).length;
+
+    return {
+        count,
+        lowerLimit,
+        upperLimit
+    };
+}
+
+function quantile(values, percentile) {
+    if (!values.length) {
+        return null;
+    }
+
+    const position =
+        (values.length - 1) * percentile;
+
+    const base =
+        Math.floor(position);
+
+    const remainder =
+        position - base;
+
+    if (values[base + 1] !== undefined) {
+        return (
+            values[base] +
+            remainder *
+            (
+                values[base + 1] -
+                values[base]
+            )
+        );
+    }
+
+    return values[base];
+}
+
+function median(values) {
+    if (!values.length) {
+        return null;
+    }
+
+    const sorted =
+        [...values].sort((a, b) => a - b);
+
+    const middle =
+        Math.floor(sorted.length / 2);
+
+    if (sorted.length % 2 === 0) {
+        return (
+            sorted[middle - 1] +
+            sorted[middle]
+        ) / 2;
+    }
+
+    return sorted[middle];
+}
+
+function findPreviousSeriesPoints(payload, item) {
+    if (Array.isArray(item?.previousPoints)) {
+        return normalizeAnalysisPoints(
+            item.previousPoints
+        );
+    }
+
+    const previousSeries =
+        payload?.data?.previousTimeSeries || [];
+
+    const match =
+        previousSeries.find(previous =>
+            String(previous?.key || '') ===
+            String(item?.key || '') &&
+            (
+                !previous?.entityName ||
+                !item?.entityName ||
+                String(previous.entityName) ===
+                String(item.entityName)
+            )
+        );
+
+    return normalizeAnalysisPoints(
+        match?.points
+    );
+}
+
+function compareSeriesAverages(
+    currentPoints,
+    previousPoints
+) {
+    const currentAverage =
+        currentPoints.reduce(
+            (sum, point) =>
+                sum + point.value,
+            0
+        ) / currentPoints.length;
+
+    const previousAverage =
+        previousPoints.reduce(
+            (sum, point) =>
+                sum + point.value,
+            0
+        ) / previousPoints.length;
+
+    const difference =
+        currentAverage -
+        previousAverage;
+
+    const changePct =
+        previousAverage !== 0
+            ? difference /
+            Math.abs(previousAverage) *
+            100
+            : null;
+
+    return {
+        currentAverage,
+        previousAverage,
+        difference,
+        changePct
+    };
+}
+
+function formatAdvancedObservation(result) {
+    if (result.status === 'NO_DATA') {
+        return (
+            `${result.label} no presentó datos ` +
+            `para ${result.entityName} durante el periodo seleccionado.`
+        );
+    }
+
+    const unit =
+        result.unit
+            ? ` ${result.unit}`
+            : '';
+
+    const parts = [
+        `${result.label} en ${result.entityName}: ` +
+        `promedio ${formatNumber(result.stats.avg)}${unit}, ` +
+        `mínimo ${formatNumber(result.stats.min)}${unit} y ` +
+        `máximo ${formatNumber(result.stats.max)}${unit}.`
+    ];
+
+    if (result.expectedRange) {
+        parts.push(
+            `${formatNumber(result.expectedRange.insidePct)} % ` +
+            `de las muestras permaneció dentro del rango esperado.`
+        );
+    }
+
+    if (
+        result.warningRange &&
+        result.warningRange.outsideCount > 0
+    ) {
+        parts.push(
+            `${result.warningRange.outsideCount} muestra(s) ` +
+            `quedaron fuera del rango de advertencia.`
+        );
+    }
+
+    if (
+        result.coverage.pct <
+        result.minimumCoverage
+    ) {
+        parts.push(
+            `La cobertura estimada fue de ` +
+            `${formatNumber(result.coverage.pct)} %, ` +
+            `por debajo del mínimo configurado de ` +
+            `${formatNumber(result.minimumCoverage)} %.`
+        );
+    }
+
+    if (result.trend) {
+        const trendLabels = {
+            RISING: 'ascendente',
+            FALLING: 'descendente',
+            STABLE: 'estable'
+        };
+
+        parts.push(
+            `La tendencia calculada fue ` +
+            `${trendLabels[result.trend.direction]}.`
+        );
+    }
+
+    if (
+        result.outliers &&
+        result.outliers.count > 0
+    ) {
+        parts.push(
+            `Se detectaron ` +
+            `${result.outliers.count} valor(es) atípico(s).`
+        );
+    }
+
+    if (
+        result.previousComparison &&
+        result.previousComparison.changePct !== null
+    ) {
+        parts.push(
+            `El promedio cambió ` +
+            `${formatNumber(result.previousComparison.changePct)} % ` +
+            `respecto al periodo anterior.`
+        );
+    }
+
+    return parts.join(' ');
+}
+
+function buildAdvancedConclusion(results) {
+    if (!results.length) {
+        return '';
+    }
+
+    const validResults =
+        results.filter(
+            result =>
+                result.status !== 'NO_DATA'
+        );
+
+    const noDataCount =
+        results.length - validResults.length;
+
+    const criticalCount =
+        validResults.filter(
+            result =>
+                result.status === 'CRITICAL'
+        ).length;
+
+    const attentionCount =
+        validResults.filter(
+            result =>
+                result.status === 'ATTENTION'
+        ).length;
+
+    const normalCount =
+        validResults.filter(
+            result =>
+                result.status === 'OK'
+        ).length;
+
+    const parts = [
+        `El análisis avanzado evaluó ` +
+        `${results.length} variable(s).`
+    ];
+
+    if (normalCount > 0) {
+        parts.push(
+            `${normalCount} variable(s) mantuvieron ` +
+            `un comportamiento aceptable conforme a los criterios configurados.`
+        );
+    }
+
+    if (attentionCount > 0) {
+        parts.push(
+            `${attentionCount} variable(s) requieren revisión ` +
+            `por cobertura, tendencia, cumplimiento parcial o valores atípicos.`
+        );
+    }
+
+    if (criticalCount > 0) {
+        parts.push(
+            `${criticalCount} variable(s) presentaron desviaciones ` +
+            `fuera de los límites de advertencia o bajo cumplimiento del rango esperado.`
+        );
+    }
+
+    if (noDataCount > 0) {
+        parts.push(
+            `${noDataCount} variable(s) no contaron con datos suficientes.`
+        );
+    }
+
+    parts.push(
+        `Los resultados describen el comportamiento medido; ` +
+        `no atribuyen una causa técnica sin una inspección adicional del sistema.`
+    );
+
+    return parts.join(' ');
+}
+
+function toFiniteNumber(value) {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ''
+    ) {
+        return null;
+    }
+
+    const number = Number(value);
+
+    return Number.isFinite(number)
+        ? number
+        : null;
+}
+
+function clampNumber(
+    value,
+    minimum,
+    maximum,
+    fallback
+) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return fallback;
+    }
+
+    return Math.min(
+        maximum,
+        Math.max(minimum, number)
+    );
+}
+
+function deduplicateTexts(values) {
+    const result = [];
+    const seen = new Set();
+
+    values.forEach(value => {
+        const text =
+            String(value || '').trim();
+
+        if (!text || seen.has(text)) {
+            return;
+        }
+
+        seen.add(text);
+        result.push(text);
+    });
+
+    return result;
 }
 
 function renderConclusion(doc, payload) {
-    const conclusion =
+    const advancedAnalysis =
+        getAdvancedAnalysis(payload);
+
+    const suppliedConclusion =
         payload?.summary?.conclusion ||
         payload?.data?.conclusion ||
-        'El reporte concentra las variables seleccionadas para facilitar la revisión operativa, identificar desviaciones y respaldar decisiones de mantenimiento, eficiencia y control.';
+        '';
 
-    const text = cleanObservation(conclusion, payload);
+    /*
+     * Se conservan tanto la conclusión proporcionada
+     * por el backend como la conclusión avanzada.
+     */
+    const conclusionParts =
+        deduplicateTexts([
+            suppliedConclusion,
+            advancedAnalysis?.conclusion
+        ]);
+
+    const conclusion =
+        conclusionParts.length
+            ? conclusionParts.join(' ')
+            : 'El reporte concentra las variables seleccionadas para facilitar la revisión operativa, identificar desviaciones y respaldar decisiones de mantenimiento, eficiencia y control.';
+
+    const text =
+        cleanObservation(
+            conclusion,
+            payload
+        );
 
     if (!text) {
         return;
@@ -1381,16 +2470,26 @@ function renderConclusion(doc, payload) {
     sectionTitle(doc, 'Conclusión');
     normalizePdfState(doc);
 
-    const left = doc.page.margins.left;
-    const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const left =
+        doc.page.margins.left;
+
+    const width =
+        doc.page.width -
+        doc.page.margins.left -
+        doc.page.margins.right;
 
     doc.fontSize(10)
         .fillColor('#333333')
-        .text(safeText(text, 1200), left, doc.y, {
-            width,
-            align: 'left',
-            lineGap: 4
-        });
+        .text(
+            safeText(text, 2000),
+            left,
+            doc.y,
+            {
+                width,
+                align: 'left',
+                lineGap: 4
+            }
+        );
 
     normalizePdfState(doc);
 }
@@ -1522,24 +2621,21 @@ function contrastTextColor(hexColor) {
 function renderPageFooters(doc, payload) {
     const branding = getBranding(payload);
     const theme = getTheme(doc);
-
     const pageRange = doc.bufferedPageRange();
 
     if (!pageRange || pageRange.count <= 1) {
         return;
     }
 
-    /*
-     * La primera página es la portada y no se numera.
-     */
-    const firstContentPage =
-        pageRange.start + 1;
-
+    const firstContentPage = pageRange.start + 1;
     const lastPageExclusive =
         pageRange.start + pageRange.count;
 
     const totalContentPages =
         pageRange.count - 1;
+
+    const lastPageIndex =
+        lastPageExclusive - 1;
 
     const generatedAt =
         payload?.meta?.generatedAt ||
@@ -1552,53 +2648,51 @@ function renderPageFooters(doc, payload) {
     ) {
         doc.switchToPage(pageIndex);
 
+        const originalX = doc.x;
+        const originalY = doc.y;
+        const originalBottomMargin =
+            doc.page.margins.bottom;
+
+        /*
+         * PDFKit crea una página nueva cuando se escribe
+         * dentro del margen inferior. Temporalmente se
+         * elimina ese margen únicamente para el pie.
+         */
+        doc.page.margins.bottom = 0;
+
         const pageNumber =
             pageIndex - firstContentPage + 1;
 
         const left =
             doc.page.margins.left;
 
-        const width =
+        const right =
             doc.page.width -
-            doc.page.margins.left -
             doc.page.margins.right;
 
-        const footerLineY =
-            doc.page.height -
-            doc.page.margins.bottom +
-            5;
+        const width =
+            right - left;
 
-        const footerTextY =
-            footerLineY + 9;
+        const lineY =
+            doc.page.height - 34;
 
-        doc.moveTo(left, footerLineY)
-            .lineTo(
-                doc.page.width -
-                doc.page.margins.right,
-                footerLineY
-            )
-            .strokeColor(theme.secondaryColor)
-            .lineWidth(0.7)
-            .stroke();
+        const textY =
+            doc.page.height - 25;
 
-        const columnWidth = width / 3;
+        const columnWidth =
+            width / 3;
 
         const leftText =
-            branding.confidentialityText ||
-            '';
+            branding.confidentialityText || '';
 
         const centerParts = [];
 
         if (branding.footerText) {
-            centerParts.push(
-                branding.footerText
-            );
+            centerParts.push(branding.footerText);
         }
 
         if (branding.showGeneratedDate) {
-            centerParts.push(
-                formatIsoDate(generatedAt)
-            );
+            centerParts.push(formatIsoDate(generatedAt));
         }
 
         const centerText =
@@ -1609,14 +2703,23 @@ function renderPageFooters(doc, payload) {
                 ? `Página ${pageNumber} de ${totalContentPages}`
                 : '';
 
+        doc.save();
+
+        doc.moveTo(left, lineY)
+            .lineTo(right, lineY)
+            .strokeColor(theme.secondaryColor)
+            .lineWidth(0.6)
+            .stroke();
+
         doc.fontSize(6.5)
             .fillColor('#687582')
             .text(
                 safeText(leftText, 55),
                 left,
-                footerTextY,
+                textY,
                 {
-                    width: columnWidth - 6,
+                    width: columnWidth - 8,
+                    height: 10,
                     align: 'left',
                     lineBreak: false
                 }
@@ -1627,9 +2730,10 @@ function renderPageFooters(doc, payload) {
             .text(
                 safeText(centerText, 68),
                 left + columnWidth,
-                footerTextY,
+                textY,
                 {
                     width: columnWidth,
+                    height: 10,
                     align: 'center',
                     lineBreak: false
                 }
@@ -1639,22 +2743,26 @@ function renderPageFooters(doc, payload) {
             .fillColor('#687582')
             .text(
                 rightText,
-                left + columnWidth * 2 + 6,
-                footerTextY,
+                left + columnWidth * 2 + 8,
+                textY,
                 {
-                    width: columnWidth - 6,
+                    width: columnWidth - 8,
+                    height: 10,
                     align: 'right',
                     lineBreak: false
                 }
             );
+
+        doc.restore();
+
+        doc.page.margins.bottom =
+            originalBottomMargin;
+
+        doc.x = originalX;
+        doc.y = originalY;
     }
 
-    /*
-     * Regresa a la última página antes de cerrar.
-     */
-    doc.switchToPage(
-        lastPageExclusive - 1
-    );
+    doc.switchToPage(lastPageIndex);
 }
 
 function sectionTitle(doc, title) {

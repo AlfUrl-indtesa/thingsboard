@@ -1075,111 +1075,218 @@ function renderKeyValueTable(doc, rows) {
 }
 
 function renderKpis(doc, payload) {
-    const kpis = payload?.summary?.kpis || [];
+    const kpis =
+        payload?.summary?.kpis || [];
 
     if (!kpis.length) {
         return;
     }
 
-    sectionTitle(doc, 'Indicadores principales');
+    sectionTitle(
+        doc,
+        'Indicadores principales'
+    );
 
     const cardWidth = 160;
-    const cardHeight = 82;
+    const cardHeight = 88;
     const gap = 12;
-    let x = doc.page.margins.left;
-    let y = doc.y;
+
+    let x =
+        doc.page.margins.left;
+
+    let y =
+        doc.y;
 
     kpis.forEach(kpi => {
-        if (x + cardWidth > doc.page.width - doc.page.margins.right) {
-            x = doc.page.margins.left;
-            y += cardHeight + gap;
+        if (
+            x + cardWidth >
+            doc.page.width -
+            doc.page.margins.right
+        ) {
+            x =
+                doc.page.margins.left;
+
+            y +=
+                cardHeight +
+                gap;
         }
 
-        if (y + cardHeight > doc.page.height - doc.page.margins.bottom) {
+        if (
+            y + cardHeight >
+            doc.page.height -
+            doc.page.margins.bottom
+        ) {
             doc.addPage();
-            x = doc.page.margins.left;
-            y = doc.y;
+
+            normalizePdfState(doc);
+
+            x =
+                doc.page.margins.left;
+
+            y =
+                doc.y;
         }
 
-        const variable = findVariableConfigByKey(
-            payload,
-            kpi?.key,
-            kpi?.entityName
-        );
-
-        const variableLabel = formatVariableLabel(
-            variable,
-            kpi?.key || kpi?.label || 'Indicador'
-        );
-
-        const configuredUnit =
-            variable?.unit ??
-            kpi?.unit ??
-            '';
+        const variableLabel =
+            String(
+                kpi?.label ||
+                kpi?.key ||
+                'Indicador'
+            ).trim();
 
         const aggregationLabel =
-            humanizeAggregation(kpi?.aggregation) ||
-            (
-                kpi?.label &&
-                kpi.label !== variableLabel
-                    ? kpi.label
-                    : 'Indicador'
+            getKpiAggregationLabel(
+                kpi?.aggregation
             );
+
+        const entityName =
+            String(
+                kpi?.entityName || ''
+            ).trim();
 
         const secondaryLabel = [
             aggregationLabel,
-            kpi?.entityName || ''
-        ].filter(Boolean).join(' · ');
+            entityName
+        ]
+            .filter(Boolean)
+            .join(' · ');
 
-        doc.roundedRect(x, y, cardWidth, cardHeight, 8)
-            .fillAndStroke('#F5F8FB', '#DCE6EF');
+        const formattedValue =
+            String(
+                kpi?.formattedValue ??
+                formatNumber(kpi?.value)
+            ).trim();
 
-        doc.fillColor('#0B2239')
-            .fontSize(9.5)
+        const unit =
+            String(
+                kpi?.unit || ''
+            ).trim();
+
+        const valueText = [
+            formattedValue,
+            unit
+        ]
+            .filter(Boolean)
+            .join(' ');
+
+        doc.roundedRect(
+            x,
+            y,
+            cardWidth,
+            cardHeight,
+            8
+        )
+            .fillAndStroke(
+                '#F5F8FB',
+                '#DCE6EF'
+            );
+
+        /*
+         * Etiqueta visible de la variable.
+         */
+        doc.font('Helvetica-Bold')
+            .fillColor('#17212B')
+            .fontSize(9)
             .text(
-                safeText(variableLabel, 34),
+                variableLabel,
                 x + 10,
                 y + 10,
                 {
-                    width: cardWidth - 20,
-                    height: 14,
-                    lineBreak: false
+                    width:
+                        cardWidth - 20,
+
+                    height: 24,
+
+                    ellipsis: true
                 }
             );
 
-        doc.fillColor('#66727D')
-            .fontSize(7.2)
+        /*
+         * Tipo de operación y entidad.
+         */
+        doc.font('Helvetica')
+            .fillColor('#667482')
+            .fontSize(7.5)
             .text(
-                safeText(secondaryLabel, 38),
+                secondaryLabel,
                 x + 10,
-                y + 28,
+                y + 37,
                 {
-                    width: cardWidth - 20,
-                    height: 11,
+                    width:
+                        cardWidth - 20,
+
+                    height: 12,
+
+                    ellipsis: true,
+
                     lineBreak: false
                 }
             );
 
-        const formattedValue =
-            kpi.formattedValue ||
-            formatNumber(kpi.value);
-
-        doc.fillColor(getTheme(doc).primaryColor)
-            .fontSize(18)
+        /*
+         * Resultado con la unidad.
+         */
+        doc.font('Helvetica-Bold')
+            .fillColor(
+                getTheme(doc).primaryColor
+            )
+            .fontSize(16)
             .text(
-                `${formattedValue}${configuredUnit ? ` ${configuredUnit}` : ''}`,
+                valueText,
                 x + 10,
-                y + 47,
+                y + 56,
                 {
-                    width: cardWidth - 20,
+                    width:
+                        cardWidth - 20,
+
+                    height: 22,
+
+                    ellipsis: true,
+
                     lineBreak: false
                 }
             );
 
-        x += cardWidth + gap;
+        doc.font('Helvetica');
+
+        x +=
+            cardWidth +
+            gap;
     });
 
-    doc.y = y + cardHeight + 20;
+    doc.y =
+        y +
+        cardHeight +
+        20;
+
+    normalizePdfState(doc);
+}
+
+function getKpiAggregationLabel(
+    aggregation
+) {
+    const normalized =
+        String(
+            aggregation || ''
+        )
+            .trim()
+            .toUpperCase();
+
+    const labels = {
+        AVG: 'Promedio',
+        MIN: 'Mínimo',
+        MAX: 'Máximo',
+        SUM: 'Suma',
+        COUNT: 'Muestras',
+        FIRST: 'Primer valor',
+        LAST: 'Último valor',
+        DELTA: 'Variación'
+    };
+
+    return (
+        labels[normalized] ||
+        'Indicador'
+    );
 }
 
 function renderStatisticsTables(doc, payload) {
@@ -1703,7 +1810,12 @@ function renderCombinedChartsPage(doc, payload, series, periodLabel) {
         height: 190
     };
 
-    drawNormalizedCombinedLineChart(doc, validSeries, chartBox);
+    drawNormalizedCombinedLineChart(
+        doc,
+        validSeries,
+        chartBox,
+        getPayloadTimezone(payload)
+    );
 
     doc.y = chartBox.y + chartBox.height + 20;
     resetCursor(doc);
@@ -1732,7 +1844,12 @@ function renderCombinedChartsPage(doc, payload, series, periodLabel) {
     doc.moveDown(1);
 }
 
-function drawNormalizedCombinedLineChart(doc, series, box) {
+function drawNormalizedCombinedLineChart(
+    doc,
+    series,
+    box,
+    timezone = 'UTC'
+) {
     const colors = getChartColors(doc);
 
     const normalizedSeries = series.map(item => {

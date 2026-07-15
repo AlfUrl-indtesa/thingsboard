@@ -92,15 +92,15 @@ public class DefaultReportKpiService implements ReportKpiService {
             }
 
             ReportKpi kpi = new ReportKpi();
+
             kpi.setKey(query.getKey());
             kpi.setLabel(metadata.getLabel());
-            kpi.setUnit(metadata.getUnit());
             kpi.setEntityName(entity.getName());
-            kpi.setAggregation(query.getAggregation() != null
-                    ? query.getAggregation().name()
-                    : null);
+            kpi.setAggregation(query.getAggregation());
+            kpi.setUnit(metadata.getUnit());
             kpi.setValue(value);
-            kpi.setFormattedValue(calculationSupport.format(value));
+            kpi.setFormattedValue(
+                    calculationSupport.format(value));
             kpi.setStatus(query.getStatus());
 
             result.add(kpi);
@@ -134,14 +134,21 @@ public class DefaultReportKpiService implements ReportKpiService {
         }
 
         ReportKpi kpi = new ReportKpi();
+
         kpi.setKey(query.getKey());
         kpi.setLabel(metadata.getLabel());
+
+        /*
+         * Un KPI combinado representa múltiples entidades,
+         * por lo que no se asigna una entidad individual.
+         */
+        kpi.setEntityName(null);
+
+        kpi.setAggregation(query.getAggregation());
         kpi.setUnit(metadata.getUnit());
-        kpi.setAggregation(query.getAggregation() != null
-                ? query.getAggregation().name()
-                : null);
         kpi.setValue(value);
-        kpi.setFormattedValue(calculationSupport.format(value));
+        kpi.setFormattedValue(
+                calculationSupport.format(value));
         kpi.setStatus(query.getStatus());
 
         return kpi;

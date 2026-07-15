@@ -242,7 +242,31 @@ function renderTableOfContents(
     const titleWidth = 330;
     const pageWidth = 45;
 
-    entries.forEach((entry, index) => {
+    /*
+     * Se usa un for clásico porque break no es válido
+     * dentro del callback de Array.forEach().
+     */
+    for (
+        let index = 0;
+        index < entries.length;
+        index++
+    ) {
+        const entry = entries[index];
+
+        /*
+         * La versión actual reserva una sola página
+         * para el índice. Si se llena, termina de
+         * imprimir entradas sin crear páginas nuevas.
+         */
+        if (
+            doc.y >
+            doc.page.height -
+            doc.page.margins.bottom -
+            40
+        ) {
+            break;
+        }
+
         const y = doc.y;
 
         doc.fontSize(10)
@@ -263,11 +287,20 @@ function renderTableOfContents(
         const lineEnd =
             right - pageWidth - 8;
 
-        doc.moveTo(lineStart, y + 7)
-            .lineTo(lineEnd, y + 7)
-            .dash(1, {
-                space: 3
-            })
+        doc.moveTo(
+            lineStart,
+            y + 7
+        )
+            .lineTo(
+                lineEnd,
+                y + 7
+            )
+            .dash(
+                1,
+                {
+                    space: 3
+                }
+            )
             .strokeColor('#A7B6C3')
             .lineWidth(0.6)
             .stroke()
@@ -289,24 +322,18 @@ function renderTableOfContents(
             );
 
         doc.y = y + 28;
-
-        if (
-            index < entries.length - 1 &&
-            doc.y >
-            doc.page.height -
-            doc.page.margins.bottom -
-            40
-        ) {
-            break;
-        }
-    });
+    }
 
     const period =
         payload?.period || {};
 
     if (
         period.startTs &&
-        period.endTs
+        period.endTs &&
+        doc.y <
+        doc.page.height -
+        doc.page.margins.bottom -
+        60
     ) {
         doc.moveDown(2);
 

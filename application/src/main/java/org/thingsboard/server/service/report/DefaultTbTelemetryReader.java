@@ -149,6 +149,19 @@ public class DefaultTbTelemetryReader implements TbTelemetryReader {
                 totalLimit);
 
         int maximumPages = resolveMaxPages();
+        log.warn(
+                "REPORT_PAGING_CONFIG: entityId={}, key={}, " +
+                        "requestedLimit={}, totalLimit={}, pageSize={}, " +
+                        "maxPages={}, range=[{},{}], orderBy={}",
+                entityId,
+                key,
+                requestedLimit,
+                totalLimit,
+                pageSize,
+                maximumPages,
+                startTs,
+                endTs,
+                orderBy);
 
         Map<Long, ReportMetricPoint> pointsByTimestamp = new HashMap<>();
 

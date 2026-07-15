@@ -30,6 +30,16 @@ export class ReportTemplateDialogComponent implements OnInit {
   variableConfigs: ReportVariableConfig[] = [];
   loadingKeysByEntityId: Record<string, boolean> = {};
 
+  logoPreviewUrl = "";
+
+  logoPreviewStatus:
+    | "EMPTY"
+    | "LOADING"
+    | "VALID"
+    | "INVALID" = "EMPTY";
+
+  private readonly maxLogoBytes = 1024 * 1024;
+
   form = this.fb.group({
     name: new FormControl<string>("", {
       nonNullable: true,
@@ -200,6 +210,8 @@ export class ReportTemplateDialogComponent implements OnInit {
 
       showGeneratedDate: template.branding?.showGeneratedDate !== false,
     });
+
+    this.onLogoUrlChanged();
 
     this.variableConfigs = this.extractVariablesFromSections(
       template.sections || [],
@@ -398,6 +410,95 @@ export class ReportTemplateDialogComponent implements OnInit {
     event: Event,
   ): void {
     config[field] = (event.target as HTMLInputElement).checked;
+  }
+
+  onLogoUrlChanged(): void {
+    const value = (
+      this.form.get("logoUrl")?.value || ""
+    ).trim();
+
+    if (!value) {
+      this.logoPreviewUrl = "";
+      this.logoPreviewStatus = "EMPTY";
+      return;
+    }
+
+    this.logoPreviewStatus = "LOADING";
+
+    /*
+     * Se limpia primero para permitir volver a comprobar
+     * exactamente la misma dirección.
+     */
+    this.logoPreviewUrl = "";
+
+    setTimeout(() => {
+      this.logoPreviewUrl = value;
+    });
+  }
+
+  onLogoFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = [
+      "image/png",
+      "image/jpeg",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      this.logoPreviewStatus = "INVALID";
+      this.logoPreviewUrl = "";
+      input.value = "";
+      return;
+    }
+
+    if (file.size > this.maxLogoBytes) {
+      this.logoPreviewStatus = "INVALID";
+      this.logoPreviewUrl = "";
+      input.value = "";
+      return;
+    }
+
+    this.logoPreviewStatus = "LOADING";
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+
+      if (!dataUrl) {
+        this.logoPreviewStatus = "INVALID";
+        return;
+      }
+
+      this.form
+        .get("logoUrl")
+        ?.setValue(dataUrl);
+
+      this.logoPreviewUrl = dataUrl;
+    };
+
+    reader.onerror = () => {
+      this.logoPreviewStatus = "INVALID";
+      this.logoPreviewUrl = "";
+    };
+
+    reader.readAsDataURL(file);
+
+    input.value = "";
+  }
+
+  onLogoPreviewLoaded(): void {
+    this.logoPreviewStatus = "VALID";
+  }
+
+  onLogoPreviewError(): void {
+    this.logoPreviewStatus = "INVALID";
   }
 
   onVariableStatChanged(

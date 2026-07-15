@@ -183,7 +183,14 @@
         "stat_first": "First value",
         "stat_last": "Last value",
         "stat_delta": "Change",
-        "name_required": "Name is required"
+        "name_required": "Name is required",
+        "logo_url_hint": "Use a direct PNG/JPG URL or upload a file up to 1 MB.",
+        "upload_logo": "Upload logo",
+        "test_logo": "Test image",
+        "logo_not_selected": "No logo has been selected.",
+        "logo_loading": "Checking image...",
+        "logo_valid": "The logo loaded successfully.",
+        "logo_invalid": "The logo could not be loaded. Use a PNG or JPG file up to 1 MB."
     },
     "action": {
         "activate": "Activate",

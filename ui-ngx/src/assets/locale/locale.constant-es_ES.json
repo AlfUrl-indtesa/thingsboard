@@ -183,7 +183,14 @@
     "stat_first": "Primer valor",
     "stat_last": "Último valor",
     "stat_delta": "Variación",
-    "name_required": "El nombre es obligatorio"
+    "name_required": "El nombre es obligatorio",
+    "logo_url_hint": "Usa una URL directa a PNG/JPG o carga un archivo de hasta 1 MB.",
+    "upload_logo": "Cargar logotipo",
+    "test_logo": "Comprobar imagen",
+    "logo_not_selected": "No se ha seleccionado un logotipo.",
+    "logo_loading": "Comprobando imagen...",
+    "logo_valid": "El logotipo se cargó correctamente.",
+    "logo_invalid": "No fue posible cargar el logotipo. Usa PNG o JPG de hasta 1 MB."
   },
   "action": {
     "activate": "Activar",

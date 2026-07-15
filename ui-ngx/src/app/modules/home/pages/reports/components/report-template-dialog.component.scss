@@ -237,3 +237,51 @@ mat-form-field {
     grid-template-columns: 1fr;
   }
 }
+
+.logo-configuration {
+  display: grid;
+  gap: 12px;
+}
+
+.logo-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.logo-upload-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.logo-preview-card {
+  min-height: 100px;
+  padding: 12px;
+  border: 1px dashed rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-preview-card img {
+  display: block;
+  max-width: 180px;
+  max-height: 80px;
+  object-fit: contain;
+}
+
+.logo-preview-valid {
+  border-color: #2e7d32;
+}
+
+.logo-preview-invalid {
+  border-color: #c63228;
+}

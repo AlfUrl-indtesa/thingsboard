@@ -641,13 +641,63 @@
         <input matInput formControlName="siteName">
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
-        <mat-label>
-          {{ 'reports.logo_url' | translate }}
-        </mat-label>
+      <div class="logo-configuration">
 
-        <input matInput formControlName="logoUrl">
-      </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>
+            {{ 'reports.logo_url' | translate }}
+          </mat-label>
+
+          <input matInput formControlName="logoUrl" (input)="onLogoUrlChanged()">
+
+          <mat-hint>
+            {{ 'reports.logo_url_hint' | translate }}
+          </mat-hint>
+        </mat-form-field>
+
+        <div class="logo-actions">
+
+          <label class="logo-upload-button">
+            <input type="file" hidden accept="image/png,image/jpeg" (change)="onLogoFileSelected($event)">
+
+            {{ 'reports.upload_logo' | translate }}
+          </label>
+
+          <button type="button" mat-stroked-button (click)="onLogoUrlChanged()">
+
+            {{ 'reports.test_logo' | translate }}
+          </button>
+
+        </div>
+
+        <div class="logo-preview-card" [class.logo-preview-valid]="
+      logoPreviewStatus === 'VALID'
+    " [class.logo-preview-invalid]="
+      logoPreviewStatus === 'INVALID'
+    ">
+
+          <img *ngIf="logoPreviewUrl" [src]="logoPreviewUrl" alt="Logo preview" (load)="onLogoPreviewLoaded()"
+            (error)="onLogoPreviewError()">
+
+          <span *ngIf="logoPreviewStatus === 'EMPTY'">
+            {{ 'reports.logo_not_selected' | translate }}
+          </span>
+
+          <span *ngIf="logoPreviewStatus === 'LOADING'">
+            {{ 'reports.logo_loading' | translate }}
+          </span>
+
+          <span *ngIf="logoPreviewStatus === 'VALID'">
+            {{ 'reports.logo_valid' | translate }}
+          </span>
+
+          <span *ngIf="logoPreviewStatus === 'INVALID'">
+            {{ 'reports.logo_invalid' | translate }}
+          </span>
+
+        </div>
+
+      </div>
     </div>
 
     <div class="two-columns">

@@ -56,26 +56,103 @@ app.post('/render-report', async (req, res) => {
         renderCover(doc, payload);
         normalizePdfState(doc);
 
+        const tocEntries = [];
+        const tocPageIndex =
+            reserveTableOfContents(doc);
+
+        recordTocEntry(
+            doc,
+            tocEntries,
+            'Resumen ejecutivo'
+        );
         renderExecutiveSummary(doc, payload);
         normalizePdfState(doc);
 
+        recordTocEntry(
+            doc,
+            tocEntries,
+            'Calidad de datos'
+        );
         renderDataQuality(doc, payload);
         normalizePdfState(doc);
+
+        if ((payload?.summary?.kpis || []).length) {
+            recordTocEntry(
+                doc,
+                tocEntries,
+                'Indicadores principales'
+            );
+        }
 
         renderKpis(doc, payload);
         normalizePdfState(doc);
 
+        if ((payload?.data?.tables || []).length) {
+            recordTocEntry(
+                doc,
+                tocEntries,
+                'Estadística general'
+            );
+        }
+
         renderStatisticsTables(doc, payload);
         normalizePdfState(doc);
+
+        if ((payload?.data?.timeSeries || []).length) {
+            recordTocEntry(
+                doc,
+                tocEntries,
+                'Gráficas'
+            );
+        }
 
         renderCharts(doc, payload);
         normalizePdfState(doc);
 
+        const advancedAnalysis =
+            getAdvancedAnalysis(payload);
+
+        if (advancedAnalysis.results.length) {
+            recordTocEntry(
+                doc,
+                tocEntries,
+                'Análisis avanzado'
+            );
+
+            renderAdvancedAnalysisSummary(
+                doc,
+                payload
+            );
+
+            normalizePdfState(doc);
+        }
+
+        if (getCombinedObservations(payload).length) {
+            recordTocEntry(
+                doc,
+                tocEntries,
+                'Observaciones'
+            );
+        }
+
         renderObservations(doc, payload);
         normalizePdfState(doc);
 
+        recordTocEntry(
+            doc,
+            tocEntries,
+            'Conclusión'
+        );
+
         renderConclusion(doc, payload);
         normalizePdfState(doc);
+
+        renderTableOfContents(
+            doc,
+            payload,
+            tocPageIndex,
+            tocEntries
+        );
 
         renderPageFooters(doc, payload);
 
@@ -88,6 +165,165 @@ app.post('/render-report', async (req, res) => {
         });
     }
 });
+
+function reserveTableOfContents(doc) {
+    const pageIndex =
+        getCurrentBufferedPageIndex(doc);
+
+    /*
+     * La página actual, creada después de la portada,
+     * se reserva para el índice.
+     */
+    doc.addPage();
+    normalizePdfState(doc);
+
+    return pageIndex;
+}
+
+function getCurrentBufferedPageIndex(doc) {
+    const range =
+        doc.bufferedPageRange();
+
+    return (
+        range.start +
+        range.count -
+        1
+    );
+}
+
+function recordTocEntry(
+    doc,
+    entries,
+    title
+) {
+    const range =
+        doc.bufferedPageRange();
+
+    const physicalPageIndex =
+        getCurrentBufferedPageIndex(doc);
+
+    /*
+     * La portada es la página física cero.
+     * La página física uno corresponde a Página 1.
+     */
+    const contentPageNumber =
+        physicalPageIndex -
+        range.start;
+
+    entries.push({
+        title,
+        pageNumber: contentPageNumber
+    });
+}
+
+function renderTableOfContents(
+    doc,
+    payload,
+    tocPageIndex,
+    entries
+) {
+    const lastPageIndex =
+        getCurrentBufferedPageIndex(doc);
+
+    doc.switchToPage(tocPageIndex);
+
+    doc.x = doc.page.margins.left;
+    doc.y = doc.page.margins.top;
+
+    sectionTitle(doc, 'Índice');
+
+    const left =
+        doc.page.margins.left;
+
+    const right =
+        doc.page.width -
+        doc.page.margins.right;
+
+    const titleWidth = 330;
+    const pageWidth = 45;
+
+    entries.forEach((entry, index) => {
+        const y = doc.y;
+
+        doc.fontSize(10)
+            .fillColor('#263238')
+            .text(
+                entry.title,
+                left,
+                y,
+                {
+                    width: titleWidth,
+                    lineBreak: false
+                }
+            );
+
+        const lineStart =
+            left + titleWidth + 8;
+
+        const lineEnd =
+            right - pageWidth - 8;
+
+        doc.moveTo(lineStart, y + 7)
+            .lineTo(lineEnd, y + 7)
+            .dash(1, {
+                space: 3
+            })
+            .strokeColor('#A7B6C3')
+            .lineWidth(0.6)
+            .stroke()
+            .undash();
+
+        doc.fontSize(10)
+            .fillColor(
+                getTheme(doc).primaryColor
+            )
+            .text(
+                String(entry.pageNumber),
+                right - pageWidth,
+                y,
+                {
+                    width: pageWidth,
+                    align: 'right',
+                    lineBreak: false
+                }
+            );
+
+        doc.y = y + 28;
+
+        if (
+            index < entries.length - 1 &&
+            doc.y >
+            doc.page.height -
+            doc.page.margins.bottom -
+            40
+        ) {
+            break;
+        }
+    });
+
+    const period =
+        payload?.period || {};
+
+    if (
+        period.startTs &&
+        period.endTs
+    ) {
+        doc.moveDown(2);
+
+        doc.fontSize(8)
+            .fillColor('#6B7785')
+            .text(
+                `Periodo: ${formatTimestamp(period.startTs)} - ${formatTimestamp(period.endTs)}`,
+                left,
+                doc.y,
+                {
+                    width: right - left
+                }
+            );
+    }
+
+    doc.switchToPage(lastPageIndex);
+}
 
 async function loadLogoBuffer(value) {
     const rawValue = String(value || '').trim();
@@ -646,7 +882,8 @@ function renderExecutiveSummary(doc, payload) {
 
     const entities = payload?.context?.entities || [];
     const kpis = payload?.summary?.kpis || [];
-    const observations = payload?.summary?.observations || [];
+    const observations =
+        getCombinedObservations(payload);
 
     doc.fontSize(10)
         .fillColor('#333333')
@@ -1570,6 +1807,232 @@ function cleanObservation(text, payload) {
     return result;
 }
 
+function renderAdvancedAnalysisSummary(
+    doc,
+    payload
+) {
+    const analysis =
+        getAdvancedAnalysis(payload);
+
+    const results =
+        analysis?.results || [];
+
+    if (!results.length) {
+        return;
+    }
+
+    sectionTitle(
+        doc,
+        'Análisis avanzado'
+    );
+
+    results.forEach(result => {
+        const lines =
+            buildAnalysisDetailLines(result);
+
+        const cardHeight =
+            62 +
+            lines.length * 15;
+
+        ensureSpace(
+            doc,
+            cardHeight + 14
+        );
+
+        normalizePdfState(doc);
+
+        const left =
+            doc.page.margins.left;
+
+        const width =
+            doc.page.width -
+            doc.page.margins.left -
+            doc.page.margins.right;
+
+        const y = doc.y;
+
+        const statusColor =
+            getAnalysisStatusColor(
+                result.status
+            );
+
+        doc.roundedRect(
+            left,
+            y,
+            width,
+            cardHeight,
+            7
+        )
+            .fillAndStroke(
+                '#F8FAFC',
+                '#D9E3EB'
+            );
+
+        doc.fontSize(11)
+            .fillColor('#17212B')
+            .text(
+                `${result.label} · ${result.entityName}`,
+                left + 12,
+                y + 12,
+                {
+                    width: width - 150,
+                    lineBreak: false
+                }
+            );
+
+        doc.roundedRect(
+            left + width - 116,
+            y + 9,
+            104,
+            22,
+            10
+        )
+            .fill(statusColor);
+
+        doc.fontSize(7.5)
+            .fillColor('#FFFFFF')
+            .text(
+                getAnalysisStatusLabel(
+                    result.status
+                ),
+                left + width - 112,
+                y + 16,
+                {
+                    width: 96,
+                    align: 'center',
+                    lineBreak: false
+                }
+            );
+
+        let lineY = y + 43;
+
+        lines.forEach(line => {
+            doc.fontSize(8.2)
+                .fillColor('#45515D')
+                .text(
+                    `• ${line}`,
+                    left + 14,
+                    lineY,
+                    {
+                        width: width - 28,
+                        lineBreak: false
+                    }
+                );
+
+            lineY += 15;
+        });
+
+        doc.y =
+            y +
+            cardHeight +
+            14;
+
+        normalizePdfState(doc);
+    });
+}
+
+function buildAnalysisDetailLines(result) {
+    if (result.status === 'NO_DATA') {
+        return [
+            'No se encontraron muestras durante el periodo seleccionado.'
+        ];
+    }
+
+    const unit =
+        result.unit
+            ? ` ${result.unit}`
+            : '';
+
+    const lines = [
+        `Promedio ${formatNumber(result.stats.avg)}${unit}; mínimo ${formatNumber(result.stats.min)}${unit}; máximo ${formatNumber(result.stats.max)}${unit}.`,
+
+        `Cobertura estimada ${formatNumber(result.coverage.pct)} %; mínimo configurado ${formatNumber(result.minimumCoverage)} %.`
+    ];
+
+    if (result.expectedRange) {
+        lines.push(
+            `Cumplimiento del rango esperado: ${formatNumber(result.expectedRange.insidePct)} % de las muestras.`
+        );
+    }
+
+    if (result.warningRange) {
+        lines.push(
+            `Muestras fuera del rango de advertencia: ${result.warningRange.outsideCount}.`
+        );
+    }
+
+    if (result.trend) {
+        lines.push(
+            `Tendencia: ${getTrendLabel(result.trend.direction)}.`
+        );
+    }
+
+    if (result.outliers) {
+        lines.push(
+            `Valores atípicos detectados: ${result.outliers.count}.`
+        );
+    }
+
+    if (
+        result.previousComparison &&
+        result.previousComparison.changePct !== null
+    ) {
+        lines.push(
+            `Cambio del promedio frente al periodo anterior: ${formatSignedPercent(result.previousComparison.changePct)}.`
+        );
+    }
+
+    return lines;
+}
+
+function getAnalysisStatusLabel(status) {
+    const labels = {
+        OK: 'ACEPTABLE',
+        ATTENTION: 'REVISAR',
+        CRITICAL: 'CRÍTICO',
+        NO_DATA: 'SIN DATOS'
+    };
+
+    return labels[status] || 'SIN CLASIFICAR';
+}
+
+function getAnalysisStatusColor(status) {
+    const colors = {
+        OK: '#2E7D32',
+        ATTENTION: '#ED8B00',
+        CRITICAL: '#C62828',
+        NO_DATA: '#607D8B'
+    };
+
+    return colors[status] || '#607D8B';
+}
+
+function getTrendLabel(direction) {
+    const labels = {
+        RISING: 'ascendente',
+        FALLING: 'descendente',
+        STABLE: 'estable'
+    };
+
+    return labels[direction] || 'no determinada';
+}
+
+function formatSignedPercent(value) {
+    const number =
+        Number(value);
+
+    if (!Number.isFinite(number)) {
+        return '-';
+    }
+
+    const prefix =
+        number > 0
+            ? '+'
+            : '';
+
+    return `${prefix}${number.toFixed(2)} %`;
+}
+
 function renderObservations(doc, payload) {
     const suppliedObservations =
         payload?.summary?.observations ||
@@ -1589,10 +2052,7 @@ function renderObservations(doc, payload) {
         getAdvancedAnalysis(payload);
 
     const observations =
-        deduplicateTexts([
-            ...suppliedTexts,
-            ...advancedAnalysis.observations
-        ]);
+        getCombinedObservations(payload);
 
     if (!observations.length) {
         return;
@@ -1643,6 +2103,30 @@ function renderObservations(doc, payload) {
     });
 
     normalizePdfState(doc);
+}
+
+function getCombinedObservations(payload) {
+    const supplied =
+        payload?.summary?.observations ||
+        payload?.data?.observations ||
+        [];
+
+    const suppliedTexts =
+        supplied
+            .map(observation =>
+                typeof observation === 'string'
+                    ? observation
+                    : observation?.text
+            )
+            .filter(Boolean);
+
+    const advanced =
+        getAdvancedAnalysis(payload);
+
+    return deduplicateTexts([
+        ...suppliedTexts,
+        ...(advanced?.observations || [])
+    ]);
 }
 
 function getAdvancedAnalysis(payload) {
@@ -2305,7 +2789,7 @@ function formatAdvancedObservation(result) {
 }
 
 function buildAdvancedConclusion(results) {
-    if (!results.length) {
+    if (!results || !results.length) {
         return '';
     }
 
@@ -2315,62 +2799,145 @@ function buildAdvancedConclusion(results) {
                 result.status !== 'NO_DATA'
         );
 
-    const noDataCount =
-        results.length - validResults.length;
+    const noDataResults =
+        results.filter(
+            result =>
+                result.status === 'NO_DATA'
+        );
 
-    const criticalCount =
+    const criticalResults =
         validResults.filter(
             result =>
                 result.status === 'CRITICAL'
-        ).length;
+        );
 
-    const attentionCount =
+    const attentionResults =
         validResults.filter(
             result =>
                 result.status === 'ATTENTION'
-        ).length;
+        );
 
-    const normalCount =
+    const acceptableResults =
         validResults.filter(
             result =>
                 result.status === 'OK'
-        ).length;
+        );
 
     const parts = [
-        `El análisis avanzado evaluó ` +
-        `${results.length} variable(s).`
+        `Se evaluaron ${results.length} variable(s) mediante los criterios configurados de cobertura, rangos operativos, tendencia, valores atípicos y comparación temporal.`
     ];
 
-    if (normalCount > 0) {
+    if (acceptableResults.length) {
         parts.push(
-            `${normalCount} variable(s) mantuvieron ` +
-            `un comportamiento aceptable conforme a los criterios configurados.`
+            `${acceptableResults.length} variable(s) presentaron un comportamiento aceptable durante el periodo.`
         );
     }
 
-    if (attentionCount > 0) {
+    if (attentionResults.length) {
         parts.push(
-            `${attentionCount} variable(s) requieren revisión ` +
-            `por cobertura, tendencia, cumplimiento parcial o valores atípicos.`
+            `${attentionResults.length} variable(s) requieren revisión.`
         );
     }
 
-    if (criticalCount > 0) {
+    if (criticalResults.length) {
         parts.push(
-            `${criticalCount} variable(s) presentaron desviaciones ` +
-            `fuera de los límites de advertencia o bajo cumplimiento del rango esperado.`
+            `${criticalResults.length} variable(s) presentaron condiciones críticas respecto a los límites configurados.`
         );
     }
 
-    if (noDataCount > 0) {
+    if (noDataResults.length) {
         parts.push(
-            `${noDataCount} variable(s) no contaron con datos suficientes.`
+            `${noDataResults.length} variable(s) no contaron con telemetría suficiente.`
+        );
+    }
+
+    const priorityResults = [
+        ...criticalResults,
+        ...attentionResults
+    ].slice(0, 3);
+
+    priorityResults.forEach(result => {
+        const findings = [];
+
+        if (
+            result.coverage &&
+            result.coverage.pct <
+            result.minimumCoverage
+        ) {
+            findings.push(
+                `cobertura de ${formatNumber(result.coverage.pct)} %`
+            );
+        }
+
+        if (
+            result.expectedRange &&
+            result.expectedRange.insidePct < 95
+        ) {
+            findings.push(
+                `cumplimiento de rango de ${formatNumber(result.expectedRange.insidePct)} %`
+            );
+        }
+
+        if (
+            result.warningRange &&
+            result.warningRange.outsideCount > 0
+        ) {
+            findings.push(
+                `${result.warningRange.outsideCount} muestra(s) fuera del rango de advertencia`
+            );
+        }
+
+        if (
+            result.trend &&
+            result.trend.direction !== 'STABLE'
+        ) {
+            findings.push(
+                `tendencia ${getTrendLabel(result.trend.direction)}`
+            );
+        }
+
+        if (
+            result.outliers &&
+            result.outliers.count > 0
+        ) {
+            findings.push(
+                `${result.outliers.count} valor(es) atípico(s)`
+            );
+        }
+
+        if (
+            result.previousComparison &&
+            result.previousComparison.changePct !== null
+        ) {
+            findings.push(
+                `cambio de ${formatSignedPercent(result.previousComparison.changePct)} respecto al periodo anterior`
+            );
+        }
+
+        if (findings.length) {
+            parts.push(
+                `${result.label} en ${result.entityName}: ${findings.join(', ')}.`
+            );
+        }
+    });
+
+    if (
+        criticalResults.length +
+        attentionResults.length >
+        priorityResults.length
+    ) {
+        const remaining =
+            criticalResults.length +
+            attentionResults.length -
+            priorityResults.length;
+
+        parts.push(
+            `Además, ${remaining} variable(s) adicionales presentan hallazgos que deben revisarse en la sección de análisis avanzado.`
         );
     }
 
     parts.push(
-        `Los resultados describen el comportamiento medido; ` +
-        `no atribuyen una causa técnica sin una inspección adicional del sistema.`
+        'Las clasificaciones se basan exclusivamente en los datos y umbrales configurados; una desviación no determina por sí sola la causa técnica y debe correlacionarse con la operación y el mantenimiento del sistema.'
     );
 
     return parts.join(' ');

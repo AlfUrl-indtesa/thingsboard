@@ -16,51 +16,66 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class DefaultReportDataService implements ReportDataService {
+public class DefaultReportDataService
+                implements ReportDataService {
 
         private final ReportEntityResolverService reportEntityResolverService;
+
         private final ReportKpiService reportKpiService;
+
         private final ReportChartService reportChartService;
+
         private final ReportTableService reportTableService;
+
         private final ReportAlarmService reportAlarmService;
+
+        private final ReportTelemetryReadCache reportTelemetryReadCache;
 
         @Override
         public ReportDataResult collectReportData(
                         ReportTemplate template,
                         GenerateReportRequest request) {
 
-                List<ReportTargetEntity> entities = reportEntityResolverService.resolveEntities(
-                                template,
-                                request);
+                /*
+                 * La caché existe solamente durante esta generación.
+                 * try-with-resources garantiza su liberación incluso si
+                 * alguno de los servicios produce una excepción.
+                 */
+                try (
+                                ReportTelemetryReadCache.Scope ignored = reportTelemetryReadCache.openScope()) {
+                        List<ReportTargetEntity> entities = reportEntityResolverService.resolveEntities(
+                                        template,
+                                        request);
 
-                ReportDataResult result = new ReportDataResult();
+                        ReportDataResult result = new ReportDataResult();
 
-                result.setEntities(entities);
+                        result.setEntities(entities);
 
-                result.setKpis(
-                                reportKpiService.buildKpis(
-                                                template,
-                                                request,
-                                                entities));
+                        result.setKpis(
+                                        reportKpiService.buildKpis(
+                                                        template,
+                                                        request,
+                                                        entities));
 
-                result.setTimeSeries(
-                                reportChartService.buildTimeSeries(
-                                                template,
-                                                request,
-                                                entities));
+                        result.setTimeSeries(
+                                        reportChartService.buildTimeSeries(
+                                                        template,
+                                                        request,
+                                                        entities));
 
-                result.setTables(
-                                reportTableService.buildTables(
-                                                template,
-                                                request,
-                                                entities));
+                        result.setTables(
+                                        reportTableService.buildTables(
+                                                        template,
+                                                        request,
+                                                        entities));
 
-                result.setAlarms(
-                                reportAlarmService.findAlarms(
-                                                template,
-                                                request,
-                                                entities));
+                        result.setAlarms(
+                                        reportAlarmService.findAlarms(
+                                                        template,
+                                                        request,
+                                                        entities));
 
-                return result;
+                        return result;
+                }
         }
 }

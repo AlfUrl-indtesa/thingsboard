@@ -190,7 +190,8 @@
         "logo_not_selected": "No logo has been selected.",
         "logo_loading": "Checking image...",
         "logo_valid": "The logo loaded successfully.",
-        "logo_invalid": "The logo could not be loaded. Use a PNG or JPG file up to 1 MB."
+        "logo_invalid": "The logo could not be loaded. Use a PNG or JPG file up to 1 MB.",
+        "combined_chart_configuration": "Combined chart config"
     },
     "action": {
         "activate": "Activate",

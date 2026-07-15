@@ -1,3 +1,18 @@
+/**
+ * Copyright © 2016-2026 The Thingsboard Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.thingsboard.server.service.report;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -78,8 +93,12 @@ public class DefaultReportKpiService implements ReportKpiService {
 
             ReportKpi kpi = new ReportKpi();
             kpi.setKey(query.getKey());
-            kpi.setLabel(metadata.getLabel() + " - " + entity.getName());
+            kpi.setLabel(metadata.getLabel());
             kpi.setUnit(metadata.getUnit());
+            kpi.setEntityName(entity.getName());
+            kpi.setAggregation(query.getAggregation() != null
+                    ? query.getAggregation().name()
+                    : null);
             kpi.setValue(value);
             kpi.setFormattedValue(calculationSupport.format(value));
             kpi.setStatus(query.getStatus());
@@ -118,6 +137,9 @@ public class DefaultReportKpiService implements ReportKpiService {
         kpi.setKey(query.getKey());
         kpi.setLabel(metadata.getLabel());
         kpi.setUnit(metadata.getUnit());
+        kpi.setAggregation(query.getAggregation() != null
+                ? query.getAggregation().name()
+                : null);
         kpi.setValue(value);
         kpi.setFormattedValue(calculationSupport.format(value));
         kpi.setStatus(query.getStatus());

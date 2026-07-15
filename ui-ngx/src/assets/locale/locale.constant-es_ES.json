@@ -190,7 +190,8 @@
     "logo_not_selected": "No se ha seleccionado un logotipo.",
     "logo_loading": "Comprobando imagen...",
     "logo_valid": "El logotipo se cargó correctamente.",
-    "logo_invalid": "No fue posible cargar el logotipo. Usa PNG o JPG de hasta 1 MB."
+    "logo_invalid": "No fue posible cargar el logotipo. Usa PNG o JPG de hasta 1 MB.",
+    "combined_chart_configuration": "Configuración de gráfica combinada"
   },
   "action": {
     "activate": "Activar",

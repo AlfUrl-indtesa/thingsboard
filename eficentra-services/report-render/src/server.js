@@ -106,7 +106,7 @@ app.post('/render-report', async (req, res) => {
             );
         }
 
-        renderCharts(doc, payload);
+        renderCharts(doc, payload, tocEntries);
         normalizePdfState(doc);
 
         const advancedAnalysis =
@@ -194,7 +194,8 @@ function getCurrentBufferedPageIndex(doc) {
 function recordTocEntry(
     doc,
     entries,
-    title
+    title,
+    level = 0
 ) {
     const range =
         doc.bufferedPageRange();
@@ -212,7 +213,8 @@ function recordTocEntry(
 
     entries.push({
         title,
-        pageNumber: contentPageNumber
+        pageNumber: contentPageNumber,
+        level
     });
 }
 
@@ -268,15 +270,19 @@ function renderTableOfContents(
         }
 
         const y = doc.y;
+        const level = Number(entry.level) || 0;
+        const indent = Math.min(level, 2) * 18;
+        const entryFontSize = level > 0 ? 8.8 : 10;
+        const entryColor = level > 0 ? '#4F5D6B' : '#263238';
 
-        doc.fontSize(10)
-            .fillColor('#263238')
+        doc.fontSize(entryFontSize)
+            .fillColor(entryColor)
             .text(
                 entry.title,
-                left,
+                left + indent,
                 y,
                 {
-                    width: titleWidth,
+                    width: titleWidth - indent,
                     lineBreak: false
                 }
             );
@@ -321,7 +327,7 @@ function renderTableOfContents(
                 }
             );
 
-        doc.y = y + 28;
+        doc.y = y + (level > 0 ? 22 : 28);
     }
 
     const period =
@@ -578,24 +584,21 @@ function validateLogoBuffer(buffer) {
     }
 }
 
-function renderCoverLogo(doc, payload) {
+function renderCoverLogo(doc, payload, options = {}) {
     const logoBuffer = payload?._logoBuffer;
 
     if (!Buffer.isBuffer(logoBuffer)) {
         return false;
     }
 
-    const boxWidth = 128;
-    const boxHeight = 72;
-
-    const x =
-        doc.page.width -
-        doc.page.margins.right -
-        boxWidth;
-
-    const y = 30;
+    const boxWidth = options.width || 128;
+    const boxHeight = options.height || 72;
+    const x = options.x ?? doc.page.margins.left;
+    const y = options.y ?? 28;
 
     try {
+        doc.save();
+
         doc.roundedRect(
             x,
             y,
@@ -603,7 +606,7 @@ function renderCoverLogo(doc, payload) {
             boxHeight,
             6
         )
-            .fillOpacity(0.96)
+            .fillOpacity(0.98)
             .fill('#FFFFFF');
 
         doc.fillOpacity(1);
@@ -622,8 +625,15 @@ function renderCoverLogo(doc, payload) {
             }
         );
 
+        doc.restore();
         return true;
     } catch (error) {
+        try {
+            doc.restore();
+        } catch (_) {
+            // El estado puede no haberse guardado si PDFKit falló antes.
+        }
+
         doc.fillOpacity(1);
 
         console.warn(
@@ -642,9 +652,6 @@ function renderCover(doc, payload) {
     const primaryColor = theme.primaryColor;
     const secondaryColor = theme.secondaryColor;
     const primaryTextColor = contrastTextColor(primaryColor);
-
-    const logoRendered =
-        renderCoverLogo(doc, payload);
 
     const title =
         branding.coverTitle ||
@@ -670,28 +677,9 @@ function renderCover(doc, payload) {
         doc.page.margins.left -
         doc.page.margins.right;
 
-    const companyTextWidth =
-        logoRendered
-            ? contentWidth - 155
-            : contentWidth;
-
-    doc.fillColor(primaryTextColor)
-        .fontSize(26)
-        .text(
-            safeText(
-                branding.companyName || 'Eficentra',
-                55
-            ),
-            left,
-            38,
-            {
-                width: companyTextWidth,
-                lineBreak: false
-            }
-        );
-
     /*
-     * Encabezado principal.
+     * Encabezado principal. El fondo se dibuja antes del logotipo;
+     * de lo contrario la imagen queda cubierta por el rectángulo.
      */
     doc.rect(
         0,
@@ -707,14 +695,28 @@ function renderCover(doc, payload) {
         8
     ).fill(secondaryColor);
 
+    const logoRendered = renderCoverLogo(
+        doc,
+        payload,
+        {
+            x: left,
+            y: 28,
+            width: 128,
+            height: 72
+        }
+    );
+
+    const headerTextX = logoRendered ? left + 148 : left;
+    const headerTextWidth = contentWidth - (logoRendered ? 148 : 0);
+
     doc.fillColor(primaryTextColor)
         .fontSize(26)
         .text(
             safeText(branding.companyName || 'Eficentra', 55),
-            left,
+            headerTextX,
             38,
             {
-                width: contentWidth,
+                width: headerTextWidth,
                 lineBreak: false
             }
         );
@@ -727,10 +729,10 @@ function renderCover(doc, payload) {
                 'Sistema de monitoreo y análisis operativo',
                 90
             ),
-            left,
+            headerTextX,
             79,
             {
-                width: contentWidth,
+                width: headerTextWidth,
                 lineBreak: false
             }
         );
@@ -1082,12 +1084,12 @@ function renderKpis(doc, payload) {
     sectionTitle(doc, 'Indicadores principales');
 
     const cardWidth = 160;
-    const cardHeight = 70;
+    const cardHeight = 82;
     const gap = 12;
     let x = doc.page.margins.left;
     let y = doc.y;
 
-    kpis.forEach((kpi, index) => {
+    kpis.forEach(kpi => {
         if (x + cardWidth > doc.page.width - doc.page.margins.right) {
             x = doc.page.margins.left;
             y += cardHeight + gap;
@@ -1099,27 +1101,80 @@ function renderKpis(doc, payload) {
             y = doc.y;
         }
 
+        const variable = findVariableConfigByKey(
+            payload,
+            kpi?.key,
+            kpi?.entityName
+        );
+
+        const variableLabel = formatVariableLabel(
+            variable,
+            kpi?.key || kpi?.label || 'Indicador'
+        );
+
+        const configuredUnit =
+            variable?.unit ??
+            kpi?.unit ??
+            '';
+
+        const aggregationLabel =
+            humanizeAggregation(kpi?.aggregation) ||
+            (
+                kpi?.label &&
+                kpi.label !== variableLabel
+                    ? kpi.label
+                    : 'Indicador'
+            );
+
+        const secondaryLabel = [
+            aggregationLabel,
+            kpi?.entityName || ''
+        ].filter(Boolean).join(' · ');
+
         doc.roundedRect(x, y, cardWidth, cardHeight, 8)
             .fillAndStroke('#F5F8FB', '#DCE6EF');
 
+        doc.fillColor('#0B2239')
+            .fontSize(9.5)
+            .text(
+                safeText(variableLabel, 34),
+                x + 10,
+                y + 10,
+                {
+                    width: cardWidth - 20,
+                    height: 14,
+                    lineBreak: false
+                }
+            );
+
+        doc.fillColor('#66727D')
+            .fontSize(7.2)
+            .text(
+                safeText(secondaryLabel, 38),
+                x + 10,
+                y + 28,
+                {
+                    width: cardWidth - 20,
+                    height: 11,
+                    lineBreak: false
+                }
+            );
+
+        const formattedValue =
+            kpi.formattedValue ||
+            formatNumber(kpi.value);
+
         doc.fillColor(getTheme(doc).primaryColor)
             .fontSize(18)
-            .text(kpi.label || kpi.key || 'KPI', x + 10, y + 10, {
-                width: cardWidth - 20,
-                height: 20
-            });
-
-        doc.fillColor('#0B2239')
-            .fontSize(18)
-            .text(kpi.formattedValue || formatNumber(kpi.value), x + 10, y + 32, {
-                width: cardWidth - 20
-            });
-
-        if (kpi.unit) {
-            doc.fillColor('#667')
-                .fontSize(8)
-                .text(kpi.unit, x + 10, y + 55);
-        }
+            .text(
+                `${formattedValue}${configuredUnit ? ` ${configuredUnit}` : ''}`,
+                x + 10,
+                y + 47,
+                {
+                    width: cardWidth - 20,
+                    lineBreak: false
+                }
+            );
 
         x += cardWidth + gap;
     });
@@ -1138,7 +1193,7 @@ function renderStatisticsTables(doc, payload) {
         sectionTitle(doc, table.title || 'Tabla de datos');
 
         const columns = table.columns || [];
-        const rows = table.rows || [];
+        const rows = prepareStatisticsRows(payload, table.rows || []);
 
         if (!columns.length || !rows.length) {
             doc.fontSize(10).fillColor('#666').text('No hay datos disponibles para esta tabla.');
@@ -1146,21 +1201,43 @@ function renderStatisticsTables(doc, payload) {
             return;
         }
 
-        renderTable(doc, columns, rows);
+        renderTable(doc, columns, rows, payload);
         doc.moveDown();
     });
 }
 
-function renderTable(doc, columns, rows) {
+function prepareStatisticsRows(payload, rows) {
+    return (rows || []).map(row => {
+        const key = row?.key ?? row?.variable ?? '';
+        const entityName = row?.entity ?? row?.entityName ?? '';
+        const variable = findVariableConfigByKey(
+            payload,
+            key,
+            entityName
+        );
+
+        if (!variable) {
+            return row;
+        }
+
+        return {
+            ...row,
+            key: formatVariableLabel(variable, key, true),
+            variable: formatVariableLabel(variable, key, true)
+        };
+    });
+}
+
+function renderTable(doc, columns, rows, payload) {
     const startX = doc.page.margins.left;
     const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const rowHeight = 24;
 
     const columnWeights = columns.map(col => {
-        if (col.key === 'entity') return 1.6;
-        if (col.key === 'key') return 1.1;
-        if (col.key === 'samples') return 0.8;
-        if (col.key === 'firstTs' || col.key === 'lastTs') return 1.35;
+        if (col.key === 'entity') return 1.35;
+        if (col.key === 'key' || col.key === 'variable') return 1.55;
+        if (col.key === 'samples') return 0.7;
+        if (col.key === 'firstTs' || col.key === 'lastTs') return 1.45;
         return 0.9;
     });
 
@@ -1218,13 +1295,13 @@ function renderTable(doc, columns, rows) {
             let value = row[col.key] !== undefined && row[col.key] !== null ? row[col.key] : '-';
 
             if (col.key === 'firstTs' || col.key === 'lastTs') {
-                value = formatTableDate(value);
+                value = formatTableDate(value, getPayloadTimezone(payload));
             }
 
             if (col.key === 'entity') {
                 value = safeText(value, 20);
             } else if (col.key === 'firstTs' || col.key === 'lastTs') {
-                value = safeText(value, 18);
+                value = safeText(value, 22);
             } else {
                 value = safeText(value, 26);
             }
@@ -1246,8 +1323,9 @@ function renderTable(doc, columns, rows) {
     doc.y = y + 12;
 }
 
-function renderCharts(doc, payload) {
-    const series = payload?.data?.timeSeries || [];
+function renderCharts(doc, payload, tocEntries = []) {
+    const series = (payload?.data?.timeSeries || [])
+        .map(item => applySeriesPresentation(payload, item));
 
     if (!series.length) {
         return;
@@ -1261,18 +1339,58 @@ function renderCharts(doc, payload) {
     const chartLayout = getChartLayout(payload);
 
     if (chartLayout === 'COMBINED') {
+        ensureSpace(doc, 390);
+        normalizePdfState(doc);
+
+        const seenVariables = new Set();
+
+        series.forEach(item => {
+            const id = `${item.entityId || item.entityName || ''}:${item.key || item.label || ''}`;
+
+            if (seenVariables.has(id)) {
+                return;
+            }
+
+            seenVariables.add(id);
+            recordTocEntry(
+                doc,
+                tocEntries,
+                `${item.label || item.key}${item.entityName ? ` · ${item.entityName}` : ''}`,
+                1
+            );
+        });
+
         renderCombinedChartsWithGranularity(doc, payload, series);
         return;
     }
 
     series.forEach(item => {
-        renderSeriesWithGranularity(doc, payload, item);
+        let tocRecorded = false;
+
+        renderSeriesWithGranularity(
+            doc,
+            payload,
+            item,
+            () => {
+                if (tocRecorded) {
+                    return;
+                }
+
+                tocRecorded = true;
+                recordTocEntry(
+                    doc,
+                    tocEntries,
+                    `${item.label || item.key}${item.entityName ? ` · ${item.entityName}` : ''}`,
+                    1
+                );
+            }
+        );
     });
 
     normalizePdfState(doc);
 }
 
-function renderSeriesMiniTable(doc, series) {
+function renderSeriesMiniTable(doc, series, payload) {
     const points = series.points || [];
     const stats = calculateStats(points);
 
@@ -1280,11 +1398,13 @@ function renderSeriesMiniTable(doc, series) {
         return;
     }
 
+    const unitSuffix = series?.unit ? ` (${series.unit})` : '';
+
     const columns = [
         { key: 'samples', label: 'Muestras', align: 'right' },
-        { key: 'min', label: 'Mínimo', align: 'right' },
-        { key: 'max', label: 'Máximo', align: 'right' },
-        { key: 'avg', label: 'Promedio', align: 'right' },
+        { key: 'min', label: `Mínimo${unitSuffix}`, align: 'right' },
+        { key: 'max', label: `Máximo${unitSuffix}`, align: 'right' },
+        { key: 'avg', label: `Promedio${unitSuffix}`, align: 'right' },
         { key: 'firstTs', label: 'Primera muestra', align: 'right' },
         { key: 'lastTs', label: 'Última muestra', align: 'right' }
     ];
@@ -1295,8 +1415,8 @@ function renderSeriesMiniTable(doc, series) {
             min: formatNumber(stats.min),
             max: formatNumber(stats.max),
             avg: formatNumber(stats.avg),
-            firstTs: formatTableDate(stats.firstTs),
-            lastTs: formatTableDate(stats.lastTs)
+            firstTs: formatTableDate(stats.firstTs, getPayloadTimezone(payload)),
+            lastTs: formatTableDate(stats.lastTs, getPayloadTimezone(payload))
         }
     ];
 
@@ -1310,7 +1430,7 @@ function renderCombinedChartsWithGranularity(doc, payload, series) {
     console.log('[report-render] combined granularity=', granularity, 'series=', series.length);
 
     if (granularity === 'FULL') {
-        renderCombinedChartsPage(doc, series, null);
+        renderCombinedChartsPage(doc, payload, series, null);
         return;
     }
 
@@ -1319,18 +1439,90 @@ function renderCombinedChartsWithGranularity(doc, payload, series) {
     console.log('[report-render] combined periods=', groups.length);
 
     if (!groups.length) {
-        renderCombinedChartsPage(doc, series, null);
+        renderCombinedChartsPage(doc, payload, series, null);
         return;
     }
 
     groups.forEach(group => {
-        renderCombinedChartsPage(doc, group.series, group.label);
+        renderCombinedChartsPage(doc, payload, group.series, group.label);
     });
 
     normalizePdfState(doc);
 }
 
+function getCombinedChartConfig(payload) {
+    return findCombinedChartConfig(payload, 0) || {
+        granularity: 'FULL',
+        tableEnabled: true,
+        stats: {
+            min: true,
+            max: true,
+            avg: true,
+            count: true,
+            sum: false,
+            first: false,
+            last: false,
+            delta: false
+        }
+    };
+}
+
+function findCombinedChartConfig(node, depth) {
+    if (!node || depth > 8) {
+        return null;
+    }
+
+    if (Array.isArray(node)) {
+        for (const item of node) {
+            const found = findCombinedChartConfig(item, depth + 1);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    if (typeof node !== 'object') {
+        return null;
+    }
+
+    if (node.combinedChart && typeof node.combinedChart === 'object') {
+        return node.combinedChart;
+    }
+
+    if (
+        node.config?.combinedChart &&
+        typeof node.config.combinedChart === 'object'
+    ) {
+        return node.config.combinedChart;
+    }
+
+    for (const value of Object.values(node)) {
+        const found = findCombinedChartConfig(value, depth + 1);
+        if (found) {
+            return found;
+        }
+    }
+
+    return null;
+}
+
 function getCombinedChartGranularity(payload, series) {
+    const combinedConfig = getCombinedChartConfig(payload);
+    const configuredGranularity = String(
+        combinedConfig?.granularity || ''
+    ).toUpperCase();
+
+    if (
+        configuredGranularity === 'FULL' ||
+        configuredGranularity === 'DAY' ||
+        configuredGranularity === 'WEEK' ||
+        configuredGranularity === 'MONTH'
+    ) {
+        return configuredGranularity;
+    }
+
     const granularities = (series || [])
         .map(item => getSeriesGranularity(payload, item))
         .filter(granularity => granularity && granularity !== 'FULL');
@@ -1473,7 +1665,7 @@ function findChartLayout(node, depth) {
     return null;
 }
 
-function renderCombinedChartsPage(doc, series, periodLabel) {
+function renderCombinedChartsPage(doc, payload, series, periodLabel) {
     const validSeries = (series || []).filter(item =>
         (item.points || []).some(point =>
             point && Number.isFinite(Number(point.value)) && Number.isFinite(Number(point.ts))
@@ -1522,8 +1714,16 @@ function renderCombinedChartsPage(doc, series, periodLabel) {
     doc.moveDown(0.8);
     normalizePdfState(doc);
 
-    renderCombinedSeriesStatsTable(doc, validSeries);
-    normalizePdfState(doc);
+    const combinedConfig = getCombinedChartConfig(payload);
+
+    if (combinedConfig?.tableEnabled !== false) {
+        renderCombinedSeriesStatsTable(
+            doc,
+            validSeries,
+            combinedConfig
+        );
+        normalizePdfState(doc);
+    }
 
     doc.moveDown(1);
     normalizePdfState(doc);
@@ -1570,12 +1770,12 @@ function drawNormalizedCombinedLineChart(doc, series, box) {
     });
 
     doc.fontSize(7).fillColor('#666666');
-    doc.text(formatShortDate(minTs), box.x, box.y + box.height + 4, {
+    doc.text(formatShortDate(minTs, timezone), box.x, box.y + box.height + 4, {
         width: 140,
         lineBreak: false
     });
 
-    doc.text(formatShortDate(maxTs), box.x + box.width - 140, box.y + box.height + 4, {
+    doc.text(formatShortDate(maxTs, timezone), box.x + box.width - 140, box.y + box.height + 4, {
         width: 140,
         align: 'right',
         lineBreak: false
@@ -1646,20 +1846,37 @@ function renderCombinedLegend(doc, series) {
     resetCursor(doc);
 }
 
-function renderCombinedSeriesStatsTable(doc, series) {
+function renderCombinedSeriesStatsTable(doc, series, combinedConfig = {}) {
+    const configuredStats = combinedConfig?.stats || {};
+    const statsConfig = {
+        count: configuredStats.count !== false,
+        min: configuredStats.min !== false,
+        max: configuredStats.max !== false,
+        avg: configuredStats.avg !== false,
+        sum: configuredStats.sum === true,
+        first: configuredStats.first === true,
+        last: configuredStats.last === true,
+        delta: configuredStats.delta === true
+    };
+
     const columns = [
         { key: 'series', label: 'Serie', align: 'left' },
-        { key: 'unit', label: 'Unidad', align: 'left' },
-        { key: 'samples', label: 'Muestras', align: 'right' },
-        { key: 'min', label: 'Mínimo', align: 'right' },
-        { key: 'max', label: 'Máximo', align: 'right' },
-        { key: 'avg', label: 'Promedio', align: 'right' }
+        { key: 'unit', label: 'Unidad', align: 'left' }
     ];
+
+    if (statsConfig.count) columns.push({ key: 'samples', label: 'Muestras', align: 'right' });
+    if (statsConfig.min) columns.push({ key: 'min', label: 'Mínimo', align: 'right' });
+    if (statsConfig.max) columns.push({ key: 'max', label: 'Máximo', align: 'right' });
+    if (statsConfig.avg) columns.push({ key: 'avg', label: 'Promedio', align: 'right' });
+    if (statsConfig.sum) columns.push({ key: 'sum', label: 'Suma', align: 'right' });
+    if (statsConfig.first) columns.push({ key: 'first', label: 'Primero', align: 'right' });
+    if (statsConfig.last) columns.push({ key: 'last', label: 'Último', align: 'right' });
+    if (statsConfig.delta) columns.push({ key: 'delta', label: 'Diferencia', align: 'right' });
 
     const rows = [];
 
     series.forEach((item, index) => {
-        const stats = calculateStats(item.points || []);
+        const stats = calculateExtendedStats(item.points || []);
 
         if (!stats) {
             return;
@@ -1671,7 +1888,11 @@ function renderCombinedSeriesStatsTable(doc, series) {
             samples: stats.count,
             min: formatNumber(stats.min),
             max: formatNumber(stats.max),
-            avg: formatNumber(stats.avg)
+            avg: formatNumber(stats.avg),
+            sum: formatNumber(stats.sum),
+            first: formatNumber(stats.first),
+            last: formatNumber(stats.last),
+            delta: formatNumber(stats.delta)
         });
     });
 
@@ -1680,6 +1901,38 @@ function renderCombinedSeriesStatsTable(doc, series) {
     }
 
     renderCompactTable(doc, columns, rows);
+}
+
+function calculateExtendedStats(points) {
+    const valid = (points || [])
+        .filter(point =>
+            point &&
+            Number.isFinite(Number(point.value)) &&
+            Number.isFinite(Number(point.ts))
+        )
+        .map(point => ({
+            ts: Number(point.ts),
+            value: Number(point.value)
+        }))
+        .sort((a, b) => a.ts - b.ts);
+
+    if (!valid.length) {
+        return null;
+    }
+
+    const values = valid.map(point => point.value);
+    const sum = values.reduce((total, value) => total + value, 0);
+
+    return {
+        count: valid.length,
+        min: Math.min(...values),
+        max: Math.max(...values),
+        avg: sum / valid.length,
+        sum,
+        first: valid[0].value,
+        last: valid[valid.length - 1].value,
+        delta: valid[valid.length - 1].value - valid[0].value
+    };
 }
 
 function getChartColors(doc) {
@@ -1751,7 +2004,7 @@ function renderCompactTable(doc, columns, rows) {
     resetCursor(doc);
 }
 
-function drawLineChart(doc, points, box) {
+function drawLineChart(doc, points, box, unit, timezone) {
     const validPoints = (points || [])
         .filter(p => p && Number.isFinite(Number(p.value)) && Number.isFinite(Number(p.ts)))
         .map(p => ({
@@ -1778,16 +2031,17 @@ function drawLineChart(doc, points, box) {
     doc.rect(box.x, box.y, box.width, box.height).stroke('#DCE6EF');
 
     doc.fontSize(8).fillColor('#666666');
-    doc.text(`Máx: ${formatNumber(max)}`, box.x, box.y - 12, { lineBreak: false });
-    doc.text(`Mín: ${formatNumber(min)}`, box.x + 85, box.y - 12, { lineBreak: false });
+    const unitSuffix = unit ? ` ${unit}` : '';
+    doc.text(`Máx: ${formatNumber(max)}${unitSuffix}`, box.x, box.y - 12, { lineBreak: false });
+    doc.text(`Mín: ${formatNumber(min)}${unitSuffix}`, box.x + 125, box.y - 12, { lineBreak: false });
 
     doc.fontSize(7).fillColor('#666666');
-    doc.text(formatShortDate(minTs), box.x, box.y + box.height + 4, {
+    doc.text(formatShortDate(minTs, timezone), box.x, box.y + box.height + 4, {
         width: 140,
         lineBreak: false
     });
 
-    doc.text(formatShortDate(maxTs), box.x + box.width - 140, box.y + box.height + 4, {
+    doc.text(formatShortDate(maxTs, timezone), box.x + box.width - 140, box.y + box.height + 4, {
         width: 140,
         align: 'right',
         lineBreak: false
@@ -1828,6 +2082,15 @@ function cleanObservation(text, payload) {
 
         if (entityId && entityName) {
             result = result.replaceAll(String(entityId), String(entityName));
+        }
+    });
+
+    extractVariableConfigs(payload).forEach(variable => {
+        const key = String(variable?.key || '').trim();
+        const label = String(variable?.label || '').trim();
+
+        if (key && label && key !== label) {
+            result = result.replaceAll(key, label);
         }
     });
 
@@ -1907,26 +2170,22 @@ function renderAdvancedAnalysisSummary(
                 }
             );
 
-        doc.roundedRect(
-            left + width - 116,
-            y + 9,
-            104,
-            22,
-            10
-        )
-            .fill(statusColor);
+        doc.rect(
+            left,
+            y,
+            4,
+            cardHeight
+        ).fill(statusColor);
 
-        doc.fontSize(7.5)
-            .fillColor('#FFFFFF')
+        doc.fontSize(8)
+            .fillColor(statusColor)
             .text(
-                getAnalysisStatusLabel(
-                    result.status
-                ),
-                left + width - 112,
-                y + 16,
+                `Estado: ${getAnalysisStatusLabel(result.status)}`,
+                left + width - 150,
+                y + 14,
                 {
-                    width: 96,
-                    align: 'center',
+                    width: 136,
+                    align: 'right',
                     lineBreak: false
                 }
             );
@@ -2014,13 +2273,13 @@ function buildAnalysisDetailLines(result) {
 
 function getAnalysisStatusLabel(status) {
     const labels = {
-        OK: 'ACEPTABLE',
-        ATTENTION: 'REVISAR',
-        CRITICAL: 'CRÍTICO',
-        NO_DATA: 'SIN DATOS'
+        OK: 'Aceptable',
+        ATTENTION: 'Requiere revisión',
+        CRITICAL: 'Condición crítica',
+        NO_DATA: 'Sin datos'
     };
 
-    return labels[status] || 'SIN CLASIFICAR';
+    return labels[status] || 'Sin clasificar';
 }
 
 function getAnalysisStatusColor(status) {
@@ -3406,19 +3665,16 @@ function resetCursor(doc) {
     doc.x = doc.page.margins.left;
 }
 
-function formatShortDate(value) {
+function formatShortDate(value, timezone = 'UTC') {
     const number = Number(value);
 
     if (!Number.isFinite(number)) {
         return '-';
     }
 
-    return new Date(number).toLocaleString('es-MX', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    const parts = getDateTimeParts(number, timezone, false);
+
+    return `${parts.day}/${parts.month}, ${parts.hour}:${parts.minute}`;
 }
 
 function formatTimestamp(value) {
@@ -3480,7 +3736,7 @@ function safeText(value, maxLength = 48) {
     return text.substring(0, maxLength - 1) + '…';
 }
 
-function formatTableDate(value) {
+function formatTableDate(value, timezone = 'UTC') {
     if (!value || value === '-') {
         return '-';
     }
@@ -3491,16 +3747,55 @@ function formatTableDate(value) {
         return String(value);
     }
 
-    return new Date(number).toLocaleString('es-MX', {
-        year: '2-digit',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    const parts = getDateTimeParts(number, timezone, true);
+
+    return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`;
 }
 
-function renderSeriesWithGranularity(doc, payload, item) {
+function getDateTimeParts(value, timezone = 'UTC', includeYear = true) {
+    let safeTimezone = timezone || 'UTC';
+
+    try {
+        new Intl.DateTimeFormat('es-MX', {
+            timeZone: safeTimezone
+        }).format(new Date(value));
+    } catch (_) {
+        safeTimezone = 'UTC';
+    }
+
+    const options = {
+        timeZone: safeTimezone,
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+    };
+
+    if (includeYear) {
+        options.year = '2-digit';
+    }
+
+    const values = {};
+
+    new Intl.DateTimeFormat('es-MX', options)
+        .formatToParts(new Date(value))
+        .forEach(part => {
+            if (part.type !== 'literal') {
+                values[part.type] = part.value;
+            }
+        });
+
+    return {
+        day: values.day || '--',
+        month: values.month || '--',
+        year: values.year || '--',
+        hour: values.hour || '--',
+        minute: values.minute || '--'
+    };
+}
+
+function renderSeriesWithGranularity(doc, payload, item, beforeFirstRender) {
     const points = item?.points || [];
 
     if (!points.length) {
@@ -3510,16 +3805,18 @@ function renderSeriesWithGranularity(doc, payload, item) {
     const granularity = getSeriesGranularity(payload, item);
 
     if (granularity === 'FULL') {
-        renderSingleSeriesChart(doc, item, null);
+        renderSingleSeriesChart(doc, payload, item, null, beforeFirstRender);
         return;
     }
 
     const groups = splitPointsByGranularity(points, granularity, getPayloadTimezone(payload));
 
     if (!groups.length) {
-        renderSingleSeriesChart(doc, item, null);
+        renderSingleSeriesChart(doc, payload, item, null, beforeFirstRender);
         return;
     }
+
+    let firstRendered = false;
 
     groups.forEach(group => {
         if (!group.points.length) {
@@ -3531,11 +3828,22 @@ function renderSeriesWithGranularity(doc, payload, item) {
             points: group.points
         };
 
-        renderSingleSeriesChart(doc, groupedItem, group.label);
+        renderSingleSeriesChart(
+            doc,
+            payload,
+            groupedItem,
+            group.label,
+            !firstRendered
+                ? () => {
+                    firstRendered = true;
+                    beforeFirstRender?.();
+                }
+                : null
+        );
     });
 }
 
-function renderSingleSeriesChart(doc, item, periodLabel) {
+function renderSingleSeriesChart(doc, payload, item, periodLabel, beforeRender) {
     const points = item?.points || [];
 
     if (!points.length) {
@@ -3544,6 +3852,7 @@ function renderSingleSeriesChart(doc, item, periodLabel) {
 
     ensureSpace(doc, 300);
     normalizePdfState(doc);
+    beforeRender?.();
 
     let title = `${item.label || item.key} - ${item.entityName || ''}`;
 
@@ -3568,12 +3877,18 @@ function renderSingleSeriesChart(doc, item, periodLabel) {
         height: 150
     };
 
-    drawLineChart(doc, points, chartBox);
+    drawLineChart(
+        doc,
+        points,
+        chartBox,
+        item?.unit || '',
+        getPayloadTimezone(payload)
+    );
 
     doc.y = chartBox.y + chartBox.height + 14;
     normalizePdfState(doc);
 
-    renderSeriesMiniTable(doc, item);
+    renderSeriesMiniTable(doc, item, payload);
     normalizePdfState(doc);
 
     doc.moveDown(1);
@@ -3637,6 +3952,77 @@ function findVariableConfigForSeries(payload, item) {
         const variableKey = String(variable?.key || '').trim();
         return variableKey && itemKey && variableKey === itemKey;
     }) || null;
+}
+
+function applySeriesPresentation(payload, item) {
+    if (!item) {
+        return item;
+    }
+
+    const variable = findVariableConfigForSeries(payload, item);
+
+    return {
+        ...item,
+        label:
+            variable?.label ||
+            item?.label ||
+            item?.key ||
+            'Variable',
+        unit:
+            variable?.unit ??
+            item?.unit ??
+            '',
+        entityName:
+            variable?.entityName ||
+            item?.entityName ||
+            ''
+    };
+}
+
+function findVariableConfigByKey(payload, key, entityName) {
+    const variables = extractVariableConfigs(payload);
+    const normalizedKey = String(key || '').trim();
+    const normalizedEntity = String(entityName || '').trim();
+
+    return variables.find(variable => {
+        const variableKey = String(variable?.key || '').trim();
+        const variableEntity = String(variable?.entityName || '').trim();
+
+        return variableKey === normalizedKey &&
+            (!normalizedEntity || !variableEntity || variableEntity === normalizedEntity);
+    }) || variables.find(variable =>
+        String(variable?.key || '').trim() === normalizedKey
+    ) || null;
+}
+
+function formatVariableLabel(variable, fallbackKey, includeUnit = false) {
+    const label =
+        variable?.label ||
+        fallbackKey ||
+        'Variable';
+
+    const unit = String(variable?.unit || '').trim();
+
+    return includeUnit && unit
+        ? `${label} (${unit})`
+        : label;
+}
+
+function humanizeAggregation(value) {
+    const normalized = String(value || '').trim().toUpperCase();
+
+    const labels = {
+        AVG: 'Promedio',
+        MIN: 'Mínimo',
+        MAX: 'Máximo',
+        SUM: 'Suma',
+        COUNT: 'Muestras',
+        FIRST: 'Primera muestra',
+        LAST: 'Última muestra',
+        DELTA: 'Diferencia'
+    };
+
+    return labels[normalized] || '';
 }
 
 function extractVariableConfigs(payload) {

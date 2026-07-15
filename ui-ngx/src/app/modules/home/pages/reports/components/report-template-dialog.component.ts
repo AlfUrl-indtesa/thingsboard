@@ -1,8 +1,19 @@
 ///
 /// Copyright © 2016-2026 The Thingsboard Authors
 ///
-/// Licensed under the Apache License, Version 2.0
+/// Licensed under the Apache License, Version 2.0 (the "License");
+/// you may not use this file except in compliance with the License.
+/// You may obtain a copy of the License at
 ///
+///     http://www.apache.org/licenses/LICENSE-2.0
+///
+/// Unless required by applicable law or agreed to in writing, software
+/// distributed under the License is distributed on an "AS IS" BASIS,
+/// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+/// See the License for the specific language governing permissions and
+/// limitations under the License.
+///
+
 import { forkJoin, of } from "rxjs";
 import { catchError } from "rxjs/operators";
 import { Component, Inject, OnInit } from "@angular/core";
@@ -122,6 +133,21 @@ export class ReportTemplateDialogComponent implements OnInit {
       nonNullable: true,
     }),
 
+    combinedGranularity: new FormControl<string>("FULL", {
+      nonNullable: true,
+    }),
+    combinedTableEnabled: new FormControl<boolean>(true, {
+      nonNullable: true,
+    }),
+    combinedStatMin: new FormControl<boolean>(true, { nonNullable: true }),
+    combinedStatMax: new FormControl<boolean>(true, { nonNullable: true }),
+    combinedStatAvg: new FormControl<boolean>(true, { nonNullable: true }),
+    combinedStatCount: new FormControl<boolean>(true, { nonNullable: true }),
+    combinedStatSum: new FormControl<boolean>(false, { nonNullable: true }),
+    combinedStatFirst: new FormControl<boolean>(false, { nonNullable: true }),
+    combinedStatLast: new FormControl<boolean>(false, { nonNullable: true }),
+    combinedStatDelta: new FormControl<boolean>(false, { nonNullable: true }),
+
     includeExecutiveSummary: [true],
     includeDataQuality: [true],
     includeGeneralStatistics: [true],
@@ -174,6 +200,9 @@ export class ReportTemplateDialogComponent implements OnInit {
     const entityType = this.normalizeEntityType(
       template.entityFilter?.entityType,
     );
+    const combinedChart = this.extractCombinedChartConfig(
+      template.sections || [],
+    );
 
     this.form.patchValue({
       name: template.name || "",
@@ -186,6 +215,16 @@ export class ReportTemplateDialogComponent implements OnInit {
       selectedKeys: this.extractKeysFromSections(template.sections || []),
       companyName: template.branding?.companyName || "Eficentra",
       chartLayout: this.extractChartLayoutFromSections(template.sections || []),
+      combinedGranularity: combinedChart.granularity,
+      combinedTableEnabled: combinedChart.tableEnabled,
+      combinedStatMin: combinedChart.stats.min,
+      combinedStatMax: combinedChart.stats.max,
+      combinedStatAvg: combinedChart.stats.avg,
+      combinedStatCount: combinedChart.stats.count,
+      combinedStatSum: combinedChart.stats.sum,
+      combinedStatFirst: combinedChart.stats.first,
+      combinedStatLast: combinedChart.stats.last,
+      combinedStatDelta: combinedChart.stats.delta,
       footerText: template.branding?.footerText ||
         "Reporte generado por Eficentra",
       customerName: template.branding?.customerName || "",
@@ -659,6 +698,7 @@ export class ReportTemplateDialogComponent implements OnInit {
   ): any[] {
     const sections = [];
     const chartLayout = this.form.getRawValue().chartLayout || "SEPARATE";
+    const combinedChart = this.buildCombinedChartConfig();
     let order = 0;
 
     if (this.form.value.includeExecutiveSummary) {
@@ -717,6 +757,7 @@ export class ReportTemplateDialogComponent implements OnInit {
           variables: selectedVariables,
           aggregation: "AVG",
           chartLayout,
+          combinedChart,
         },
       });
     }
@@ -733,6 +774,7 @@ export class ReportTemplateDialogComponent implements OnInit {
           keys: selectedKeys,
           variables: selectedVariables,
           chartLayout,
+          combinedChart,
         },
       });
     }
@@ -748,6 +790,8 @@ export class ReportTemplateDialogComponent implements OnInit {
         config: {
           keys: selectedKeys,
           variables: selectedVariables,
+          chartLayout,
+          combinedChart,
         },
       });
     }
@@ -777,6 +821,53 @@ export class ReportTemplateDialogComponent implements OnInit {
     }
 
     return sections;
+  }
+
+  private buildCombinedChartConfig(): any {
+    const raw = this.form.getRawValue();
+
+    return {
+      granularity: raw.combinedGranularity || "FULL",
+      tableEnabled: raw.combinedTableEnabled !== false,
+      stats: {
+        min: raw.combinedStatMin !== false,
+        max: raw.combinedStatMax !== false,
+        avg: raw.combinedStatAvg !== false,
+        count: raw.combinedStatCount !== false,
+        sum: raw.combinedStatSum === true,
+        first: raw.combinedStatFirst === true,
+        last: raw.combinedStatLast === true,
+        delta: raw.combinedStatDelta === true,
+      },
+    };
+  }
+
+  private extractCombinedChartConfig(sections: any[]): any {
+    const section = (sections || []).find((item) =>
+      item?.config?.combinedChart
+    );
+    const config = section?.config?.combinedChart || {};
+    const stats = config.stats || {};
+
+    return {
+      granularity:
+        config.granularity === "DAY" ||
+          config.granularity === "WEEK" ||
+          config.granularity === "MONTH"
+          ? config.granularity
+          : "FULL",
+      tableEnabled: config.tableEnabled !== false,
+      stats: {
+        min: stats.min !== false,
+        max: stats.max !== false,
+        avg: stats.avg !== false,
+        count: stats.count !== false,
+        sum: stats.sum === true,
+        first: stats.first === true,
+        last: stats.last === true,
+        delta: stats.delta === true,
+      },
+    };
   }
 
   private extractKeysFromSections(sections: any[]): string[] {

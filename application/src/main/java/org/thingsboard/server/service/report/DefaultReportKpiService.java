@@ -96,7 +96,7 @@ public class DefaultReportKpiService implements ReportKpiService {
             kpi.setKey(query.getKey());
             kpi.setLabel(metadata.getLabel());
             kpi.setEntityName(entity.getName());
-            kpi.setAggregation(query.getAggregation());
+            kpi.setAggregation(toReportAggregationType(query.getAggregation()));
             kpi.setUnit(metadata.getUnit());
             kpi.setValue(value);
             kpi.setFormattedValue(
@@ -144,7 +144,7 @@ public class DefaultReportKpiService implements ReportKpiService {
          */
         kpi.setEntityName(null);
 
-        kpi.setAggregation(query.getAggregation());
+        kpi.setAggregation(toReportAggregationType(query.getAggregation()));
         kpi.setUnit(metadata.getUnit());
         kpi.setValue(value);
         kpi.setFormattedValue(
@@ -189,5 +189,17 @@ public class DefaultReportKpiService implements ReportKpiService {
         }
 
         return result;
+    }
+
+    private ReportAggregationType toReportAggregationType(ReportKpiAggregationType aggregationType) {
+        if (aggregationType == null) {
+            return ReportAggregationType.AVG;
+        }
+
+        try {
+            return ReportAggregationType.valueOf(aggregationType.name());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unsupported KPI aggregation type: " + aggregationType, e);
+        }
     }
 }

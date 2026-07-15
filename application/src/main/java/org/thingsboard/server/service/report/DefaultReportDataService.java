@@ -32,7 +32,9 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class DefaultReportDataService implements ReportDataService {
 
-    private static final int DEFAULT_SERIES_LIMIT = 1000;
+    //Limite omitido, util para reducir load de creado de reportes, pero reduce precisión
+
+    // private static final int DEFAULT_SERIES_LIMIT = 1000;
     private static final long DEFAULT_INTERVAL_MS = 60000L;
 
     private final ReportEntityResolverService reportEntityResolverService;
@@ -177,7 +179,7 @@ public class DefaultReportDataService implements ReportDataService {
         query.setEndTs(request.getEndTs());
         query.setAggregation(ReportAggregationType.NONE);
         query.setInterval(DEFAULT_INTERVAL_MS);
-        query.setLimit(DEFAULT_SERIES_LIMIT);
+        query.setLimit(null);
         query.setOrderBy("ASC");
         return query;
     }

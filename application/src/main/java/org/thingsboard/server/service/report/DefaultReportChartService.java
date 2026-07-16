@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.report.GenerateReportRequest;
-import org.thingsboard.server.common.data.report.ReportAggregationType;
 import org.thingsboard.server.common.data.report.ReportChartQuery;
 import org.thingsboard.server.common.data.report.ReportMetricPoint;
 import org.thingsboard.server.common.data.report.ReportSectionConfig;
@@ -26,18 +25,44 @@ import org.thingsboard.server.common.data.report.ReportVariableMetadata;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DefaultReportChartService implements ReportChartService {
 
+        /*
+         * Se conserva para las secciones CHART tradicionales,
+         * configuradas mediante ReportChartQuery.
+         */
         private final ReportTelemetryService reportTelemetryService;
+
         private final ObjectMapper objectMapper;
+
+        /*
+         * Se conserva para resolver label y unidad de las
+         * consultas ReportChartQuery tradicionales.
+         */
         private final ReportVariableMetadataService variableMetadataService;
+
+        /*
+         * Extrae la configuración estructurada de variables
+         * utilizada por el revamp actual.
+         */
         private final ReportVariableConfigService variableConfigService;
+
+        /*
+         * Centraliza para las variables del revamp:
+         *
+         * - validación de entidad;
+         * - construcción de consultas;
+         * - label y unidad;
+         * - nombre visible de entidad;
+         * - escala y offset;
+         * - granularidad;
+         * - reutilización de la caché de telemetría.
+         */
+        private final ReportVariableSeriesService reportVariableSeriesService;
 
         @Override
         public List<ReportTimeSeries> buildTimeSeries(
@@ -56,15 +81,22 @@ public class DefaultReportChartService implements ReportChartService {
                 TenantId tenantId = template.getTenantId();
 
                 for (ReportSectionConfig section : template.getSections()) {
+
                         if (!isChartSection(section)
-                                        || Boolean.FALSE.equals(section.getVisible())) {
+                                        || Boolean.FALSE.equals(
+                                                        section.getVisible())) {
                                 continue;
                         }
 
+                        /*
+                         * La estructura actual del revamp almacena una lista
+                         * de ReportVariableConfig dentro de TIME_SERIES_CHART.
+                         */
                         List<ReportVariableConfig> variables = variableConfigService.extractVariables(
                                         section.getConfig());
 
                         List<ReportVariableConfig> chartVariables = variables.stream()
+                                        .filter(variable -> variable != null)
                                         .filter(variable -> !Boolean.FALSE.equals(
                                                         variable.getEnabled()))
                                         .filter(variable -> !Boolean.FALSE.equals(
@@ -79,10 +111,20 @@ public class DefaultReportChartService implements ReportChartService {
                                                                 entities,
                                                                 chartVariables));
 
+                                /*
+                                 * Cuando la sección ya contiene variables
+                                 * estructuradas, no se procesa también "items"
+                                 * para evitar series duplicadas.
+                                 */
                                 continue;
                         }
 
-                        List<ReportChartQuery> queries = extractChartQueries(section.getConfig());
+                        /*
+                         * Compatibilidad con secciones CHART tradicionales
+                         * que todavía utilicen ReportChartQuery.
+                         */
+                        List<ReportChartQuery> queries = extractChartQueries(
+                                        section.getConfig());
 
                         if (queries.isEmpty()) {
                                 continue;
@@ -101,6 +143,10 @@ public class DefaultReportChartService implements ReportChartService {
                 return result;
         }
 
+        /**
+         * Construye las series correspondientes a las variables
+         * configuradas en el revamp actual.
+         */
         private List<ReportTimeSeries> buildSeriesForVariables(
                         TenantId tenantId,
                         GenerateReportRequest request,
@@ -124,32 +170,19 @@ public class DefaultReportChartService implements ReportChartService {
                         }
 
                         for (ReportTargetEntity entity : entities) {
-                                if (!matchesEntity(variable, entity)) {
-                                        continue;
-                                }
-
-                                ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(
-                                                variable,
-                                                request);
-
-                                ReportTimeSeries series = reportTelemetryService.findSeries(
+                                /*
+                                 * El servicio devuelve null cuando la variable
+                                 * no pertenece a la entidad actual.
+                                 */
+                                ReportTimeSeries series = reportVariableSeriesService.findSeries(
                                                 tenantId,
                                                 entity,
-                                                telemetryQuery);
+                                                variable,
+                                                request);
 
                                 if (series == null) {
                                         continue;
                                 }
-
-                                applyVariableMetadata(
-                                                series,
-                                                variable);
-
-                                List<ReportMetricPoint> currentPoints = convertPoints(
-                                                series.getPoints(),
-                                                variable);
-
-                                series.setPoints(currentPoints);
 
                                 populatePreviousPeriod(
                                                 tenantId,
@@ -165,6 +198,13 @@ public class DefaultReportChartService implements ReportChartService {
                 return result;
         }
 
+        /**
+         * Adjunta los puntos del periodo anterior cuando el análisis
+         * de la variable tiene habilitada la comparación.
+         *
+         * ReportVariableSeriesService devuelve los puntos anteriores
+         * con la misma escala y offset aplicados a la serie actual.
+         */
         private void populatePreviousPeriod(
                         TenantId tenantId,
                         GenerateReportRequest request,
@@ -185,12 +225,14 @@ public class DefaultReportChartService implements ReportChartService {
 
                 if (previousPeriod == null) {
                         log.warn(
-                                        "Unable to calculate previous report period. " +
-                                                        "entityId={}, key={}, startTs={}, endTs={}",
+                                        "Unable to calculate previous report period. "
+                                                        + "entityId={}, key={}, startTs={}, endTs={}",
                                         entity != null
                                                         ? entity.getEntityId()
                                                         : null,
-                                        variable.getKey(),
+                                        variable != null
+                                                        ? variable.getKey()
+                                                        : null,
                                         request != null
                                                         ? request.getStartTs()
                                                         : null,
@@ -207,55 +249,63 @@ public class DefaultReportChartService implements ReportChartService {
                 currentSeries.setPreviousEndTs(
                                 previousPeriod.endTs);
 
-                ReportTelemetryQuery previousQuery = buildTelemetryQuery(
-                                variable,
-                                previousPeriod.startTs,
-                                previousPeriod.endTs);
-
                 try {
-                        ReportTimeSeries previousSeries = reportTelemetryService.findSeries(
+                        ReportTimeSeries previousSeries = reportVariableSeriesService.findSeries(
                                         tenantId,
                                         entity,
-                                        previousQuery);
+                                        variable,
+                                        previousPeriod.startTs,
+                                        previousPeriod.endTs);
 
                         List<ReportMetricPoint> previousPoints = previousSeries == null
-                                        ? new ArrayList<>()
-                                        : convertPoints(
-                                                        previousSeries.getPoints(),
-                                                        variable);
+                                        || previousSeries.getPoints() == null
+                                                        ? new ArrayList<>()
+                                                        : new ArrayList<>(
+                                                                        previousSeries.getPoints());
 
                         currentSeries.setPreviousPoints(
                                         previousPoints);
 
                         log.info(
-                                        "Report previous-period comparison: " +
-                                                        "entityId={}, key={}, " +
-                                                        "currentRange=[{},{}], " +
-                                                        "previousRange=[{},{}], " +
-                                                        "currentPoints={}, previousPoints={}",
-                                        entity.getEntityId(),
-                                        variable.getKey(),
-                                        request.getStartTs(),
-                                        request.getEndTs(),
+                                        "Report previous-period comparison: "
+                                                        + "entityId={}, key={}, "
+                                                        + "currentRange=[{},{}], "
+                                                        + "previousRange=[{},{}], "
+                                                        + "currentPoints={}, previousPoints={}",
+                                        entity != null
+                                                        ? entity.getEntityId()
+                                                        : null,
+                                        variable != null
+                                                        ? variable.getKey()
+                                                        : null,
+                                        request != null
+                                                        ? request.getStartTs()
+                                                        : null,
+                                        request != null
+                                                        ? request.getEndTs()
+                                                        : null,
                                         previousPeriod.startTs,
                                         previousPeriod.endTs,
                                         sizeOf(currentSeries.getPoints()),
                                         sizeOf(previousPoints));
                 } catch (RuntimeException exception) {
                         /*
-                         * Una falla en el periodo anterior no debe impedir
-                         * la generación del reporte actual.
+                         * Una falla en la consulta del periodo anterior
+                         * no debe impedir la generación del reporte actual.
                          */
                         currentSeries.setPreviousPoints(
                                         new ArrayList<>());
 
                         log.warn(
-                                        "Failed to read previous report period. " +
-                                                        "entityId={}, key={}, previousRange=[{},{}]",
+                                        "Failed to read previous report period. "
+                                                        + "entityId={}, key={}, "
+                                                        + "previousRange=[{},{}]",
                                         entity != null
                                                         ? entity.getEntityId()
                                                         : null,
-                                        variable.getKey(),
+                                        variable != null
+                                                        ? variable.getKey()
+                                                        : null,
                                         previousPeriod.startTs,
                                         previousPeriod.endTs,
                                         exception);
@@ -271,8 +321,10 @@ public class DefaultReportChartService implements ReportChartService {
                 }
 
                 /*
-                 * La consulta adicional sólo se realiza cuando
-                 * el análisis avanzado está habilitado.
+                 * La consulta adicional sólo se realiza cuando:
+                 *
+                 * 1. el análisis avanzado está habilitado;
+                 * 2. la comparación con el periodo anterior está habilitada.
                  */
                 return Boolean.TRUE.equals(
                                 variable.getAnalysis().getEnabled())
@@ -307,12 +359,12 @@ public class DefaultReportChartService implements ReportChartService {
                 }
 
                 /*
-                 * Periodo anterior adyacente:
+                 * Periodo actual:
                  *
-                 * actual:
                  * [currentStartTs, currentEndTs]
                  *
-                 * anterior:
+                 * Periodo anterior adyacente:
+                 *
                  * [currentStartTs - duration, currentStartTs - 1]
                  */
                 long previousStartTs = Math.max(
@@ -330,6 +382,12 @@ public class DefaultReportChartService implements ReportChartService {
                                 previousEndTs);
         }
 
+        /**
+         * Ruta de compatibilidad para secciones CHART tradicionales.
+         *
+         * No utiliza ReportVariableConfig porque ReportChartQuery ya
+         * contiene agregación, intervalo, límite y orden propios.
+         */
         private List<ReportTimeSeries> buildSeriesForQuery(
                         TenantId tenantId,
                         GenerateReportRequest request,
@@ -339,7 +397,10 @@ public class DefaultReportChartService implements ReportChartService {
                 List<ReportTimeSeries> result = new ArrayList<>();
 
                 if (entities == null
-                                || entities.isEmpty()) {
+                                || entities.isEmpty()
+                                || query == null
+                                || query.getKey() == null
+                                || query.getKey().isBlank()) {
                         return result;
                 }
 
@@ -361,56 +422,12 @@ public class DefaultReportChartService implements ReportChartService {
                 return result;
         }
 
-        private ReportTelemetryQuery buildTelemetryQuery(
-                        ReportVariableConfig variable,
-                        GenerateReportRequest request) {
-
-                Long startTs = request != null
-                                ? request.getStartTs()
-                                : null;
-
-                Long endTs = request != null
-                                ? request.getEndTs()
-                                : null;
-
-                return buildTelemetryQuery(
-                                variable,
-                                startTs,
-                                endTs);
-        }
-
-        private ReportTelemetryQuery buildTelemetryQuery(
-                        ReportVariableConfig variable,
-                        Long startTs,
-                        Long endTs) {
-
-                ReportVariableMetadata metadata = variableMetadataService.resolve(
-                                variable.getKey(),
-                                variable.getLabel(),
-                                variable.getUnit());
-
-                ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
-
-                telemetryQuery.setKey(
-                                variable.getKey());
-
-                telemetryQuery.setLabel(
-                                metadata.getLabel());
-
-                telemetryQuery.setUnit(
-                                metadata.getUnit());
-
-                telemetryQuery.setStartTs(startTs);
-                telemetryQuery.setEndTs(endTs);
-
-                telemetryQuery.setAggregation(
-                                ReportAggregationType.NONE);
-
-                telemetryQuery.setOrderBy("ASC");
-
-                return telemetryQuery;
-        }
-
+        /**
+         * Construye únicamente las consultas de ReportChartQuery.
+         *
+         * Las consultas basadas en ReportVariableConfig son
+         * responsabilidad de ReportVariableSeriesService.
+         */
         private ReportTelemetryQuery buildTelemetryQuery(
                         ReportChartQuery query,
                         GenerateReportRequest request) {
@@ -431,11 +448,13 @@ public class DefaultReportChartService implements ReportChartService {
                 telemetryQuery.setUnit(
                                 metadata.getUnit());
 
-                telemetryQuery.setStartTs(
-                                request.getStartTs());
+                if (request != null) {
+                        telemetryQuery.setStartTs(
+                                        request.getStartTs());
 
-                telemetryQuery.setEndTs(
-                                request.getEndTs());
+                        telemetryQuery.setEndTs(
+                                        request.getEndTs());
+                }
 
                 telemetryQuery.setAggregation(
                                 query.getAggregation());
@@ -450,99 +469,6 @@ public class DefaultReportChartService implements ReportChartService {
                                 query.getOrderBy());
 
                 return telemetryQuery;
-        }
-
-        private void applyVariableMetadata(
-                        ReportTimeSeries series,
-                        ReportVariableConfig variable) {
-
-                ReportVariableMetadata metadata = variableMetadataService.resolve(
-                                variable.getKey(),
-                                variable.getLabel(),
-                                variable.getUnit());
-
-                series.setKey(
-                                variable.getKey());
-
-                series.setLabel(
-                                metadata.getLabel());
-
-                series.setUnit(
-                                metadata.getUnit());
-
-                series.setGranularity(
-                                variable.getGranularity() != null
-                                                && !variable.getGranularity().isBlank()
-                                                                ? variable.getGranularity()
-                                                                                .toUpperCase()
-                                                                : "FULL");
-
-                if (variable.getEntityName() != null
-                                && !variable.getEntityName().isBlank()) {
-                        series.setEntityName(
-                                        variable.getEntityName());
-                }
-        }
-
-        private List<ReportMetricPoint> convertPoints(
-                        List<ReportMetricPoint> points,
-                        ReportVariableConfig variable) {
-
-                List<ReportMetricPoint> converted = new ArrayList<>();
-
-                if (points == null
-                                || points.isEmpty()) {
-                        return converted;
-                }
-
-                for (ReportMetricPoint point : points) {
-                        if (point == null
-                                        || point.getValue() == null) {
-                                continue;
-                        }
-
-                        converted.add(
-                                        new ReportMetricPoint(
-                                                        point.getTs(),
-                                                        variableConfigService
-                                                                        .applyConversion(
-                                                                                        variable,
-                                                                                        point.getValue())));
-                }
-
-                return converted;
-        }
-
-        private boolean matchesEntity(
-                        ReportVariableConfig variable,
-                        ReportTargetEntity entity) {
-
-                if (variable == null
-                                || variable.getEntityId() == null
-                                || variable.getEntityId()
-                                                .getEntityType() == null
-                                || entity == null
-                                || entity.getEntityId() == null
-                                || entity.getEntityType() == null) {
-                        return false;
-                }
-
-                UUID variableUuid = variable.getEntityId().getId();
-
-                UUID entityUuid = entity.getEntityId();
-
-                String variableType = variable.getEntityId()
-                                .getEntityType()
-                                .name();
-
-                String entityType = entity.getEntityType();
-
-                return Objects.equals(
-                                variableUuid,
-                                entityUuid)
-                                && Objects.equals(
-                                                variableType,
-                                                entityType);
         }
 
         private List<ReportChartQuery> extractChartQueries(
@@ -563,11 +489,18 @@ public class DefaultReportChartService implements ReportChartService {
                 }
 
                 for (JsonNode itemNode : itemsNode) {
+                        if (itemNode == null
+                                        || itemNode.isNull()) {
+                                continue;
+                        }
+
                         ReportChartQuery query = objectMapper.convertValue(
                                         itemNode,
                                         ReportChartQuery.class);
 
-                        result.add(query);
+                        if (query != null) {
+                                result.add(query);
+                        }
                 }
 
                 return result;
@@ -579,6 +512,25 @@ public class DefaultReportChartService implements ReportChartService {
                 return values != null
                                 ? values.size()
                                 : 0;
+        }
+
+        /**
+         * Solamente TIME_SERIES_CHART genera las series principales
+         * del revamp.
+         *
+         * DAILY_PERFORMANCE y DAILY_CHARTS utilizan posteriormente
+         * esas mismas series y no deben provocar nuevas consultas.
+         */
+        private boolean isChartSection(
+                        ReportSectionConfig section) {
+
+                if (section == null
+                                || section.getType() == null) {
+                        return false;
+                }
+
+                return section.getType() == ReportSectionType.CHART
+                                || section.getType() == ReportSectionType.TIME_SERIES_CHART;
         }
 
         private static final class PreviousPeriod {
@@ -593,17 +545,5 @@ public class DefaultReportChartService implements ReportChartService {
                         this.startTs = startTs;
                         this.endTs = endTs;
                 }
-        }
-
-        private boolean isChartSection(
-                        ReportSectionConfig section) {
-
-                if (section == null
-                                || section.getType() == null) {
-                        return false;
-                }
-
-                return section.getType() == ReportSectionType.CHART
-                                || section.getType() == ReportSectionType.TIME_SERIES_CHART;
         }
 }

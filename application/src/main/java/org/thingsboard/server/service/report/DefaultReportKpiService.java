@@ -20,7 +20,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.thingsboard.server.common.data.id.TenantId;
-import org.thingsboard.server.common.data.report.*;
+import org.thingsboard.server.common.data.report.GenerateReportRequest;
+import org.thingsboard.server.common.data.report.ReportAggregationType;
+import org.thingsboard.server.common.data.report.ReportKpi;
+import org.thingsboard.server.common.data.report.ReportKpiAggregationType;
+import org.thingsboard.server.common.data.report.ReportKpiQuery;
+import org.thingsboard.server.common.data.report.ReportMetricPoint;
+import org.thingsboard.server.common.data.report.ReportSectionConfig;
+import org.thingsboard.server.common.data.report.ReportSectionType;
+import org.thingsboard.server.common.data.report.ReportTargetEntity;
+import org.thingsboard.server.common.data.report.ReportTelemetryQuery;
+import org.thingsboard.server.common.data.report.ReportTemplate;
+import org.thingsboard.server.common.data.report.ReportTimeSeries;
+import org.thingsboard.server.common.data.report.ReportVariableConfig;
+import org.thingsboard.server.common.data.report.ReportVariableMetadata;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,11 +42,34 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DefaultReportKpiService implements ReportKpiService {
 
+    /*
+     * Sigue siendo necesario para las secciones KPI_GRID explícitas.
+     */
     private final ReportTelemetryService reportTelemetryService;
+
     private final ReportKpiCalculationSupport calculationSupport;
+
     private final ObjectMapper objectMapper;
+
     private final ReportVariableMetadataService variableMetadataService;
+
+    /*
+     * Se utiliza para extraer las variables configuradas dentro de
+     * GENERAL_STATISTICS.
+     */
     private final ReportVariableConfigService variableConfigService;
+
+    /*
+     * Centraliza para las variables del revamp:
+     *
+     * - validación de entidad;
+     * - construcción de la consulta;
+     * - label y unidad;
+     * - escala y offset;
+     * - nombre visible de la entidad;
+     * - reutilización de la caché de telemetría.
+     */
+    private final ReportVariableSeriesService reportVariableSeriesService;
 
     @Override
     public List<ReportKpi> buildKpis(
@@ -45,28 +81,31 @@ public class DefaultReportKpiService implements ReportKpiService {
 
         if (template == null
                 || template.getSections() == null
-                || template.getSections().isEmpty()) {
+                || template.getSections().isEmpty()
+                || entities == null
+                || entities.isEmpty()) {
             return result;
         }
 
         TenantId tenantId = template.getTenantId();
 
         /*
-         * Cuando exista una sección KPI_GRID explícita,
-         * ésta tiene prioridad sobre el fallback del revamp.
+         * Una sección KPI_GRID explícita tiene prioridad.
+         *
+         * De esta forma se conserva compatibilidad con plantillas
+         * que definen sus indicadores manualmente y se evita añadir
+         * también los KPI automáticos de GENERAL_STATISTICS.
          */
         boolean hasExplicitKpiGrid = template.getSections()
                 .stream()
                 .filter(section -> section != null)
-                .filter(section -> !Boolean.FALSE.equals(
-                        section.getVisible()))
+                .filter(section -> !Boolean.FALSE.equals(section.getVisible()))
                 .anyMatch(section -> section.getType() == ReportSectionType.KPI_GRID);
 
         for (ReportSectionConfig section : template.getSections()) {
 
             if (section == null
-                    || Boolean.FALSE.equals(
-                            section.getVisible())) {
+                    || Boolean.FALSE.equals(section.getVisible())) {
                 continue;
             }
 
@@ -75,12 +114,16 @@ public class DefaultReportKpiService implements ReportKpiService {
                     continue;
                 }
 
-                List<ReportKpiQuery> queries = extractKpiQueries(
-                        section.getConfig());
+                List<ReportKpiQuery> queries = extractKpiQueries(section.getConfig());
 
                 for (ReportKpiQuery query : queries) {
-                    if (Boolean.TRUE.equals(
-                            query.getCombineEntities())) {
+                    if (query == null
+                            || query.getKey() == null
+                            || query.getKey().isBlank()) {
+                        continue;
+                    }
+
+                    if (Boolean.TRUE.equals(query.getCombineEntities())) {
                         ReportKpi combinedKpi = buildCombinedKpi(
                                 tenantId,
                                 request,
@@ -104,9 +147,9 @@ public class DefaultReportKpiService implements ReportKpiService {
             }
 
             /*
-             * Compatibilidad con el revamp actual:
-             * GENERAL_STATISTICS contiene las variables
-             * seleccionadas por el usuario.
+             * Compatibilidad con la estructura actual del revamp:
+             * GENERAL_STATISTICS contiene la lista principal de
+             * variables seleccionadas por el usuario.
              */
             if (section.getType() != ReportSectionType.GENERAL_STATISTICS) {
                 continue;
@@ -123,9 +166,8 @@ public class DefaultReportKpiService implements ReportKpiService {
                             variables));
 
             /*
-             * Sólo debe existir una tabla de estadísticas
-             * generales. Evitamos procesar otra sección
-             * con las mismas variables.
+             * Sólo se procesa una sección de estadísticas generales
+             * para evitar KPI duplicados.
              */
             break;
         }
@@ -133,6 +175,13 @@ public class DefaultReportKpiService implements ReportKpiService {
         return result;
     }
 
+    /**
+     * Genera un KPI promedio por variable y entidad para las
+     * plantillas del revamp actual.
+     *
+     * Los puntos recibidos desde ReportVariableSeriesService ya
+     * contienen escala y offset aplicados.
+     */
     private List<ReportKpi> buildVariableAverageKpis(
             TenantId tenantId,
             GenerateReportRequest request,
@@ -150,70 +199,45 @@ public class DefaultReportKpiService implements ReportKpiService {
 
         for (ReportVariableConfig variable : variables) {
             if (variable == null
-                    || Boolean.FALSE.equals(
-                            variable.getEnabled())
+                    || Boolean.FALSE.equals(variable.getEnabled())
                     || variable.getKey() == null
                     || variable.getKey().isBlank()) {
                 continue;
             }
 
             for (ReportTargetEntity entity : entities) {
-                if (!matchesEntity(
-                        variable,
-                        entity)) {
-                    continue;
-                }
-
-                ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(
+                /*
+                 * ReportVariableSeriesService valida internamente
+                 * si la variable pertenece a esta entidad.
+                 */
+                ReportTimeSeries series = reportVariableSeriesService.findSeries(
+                        tenantId,
+                        entity,
                         variable,
                         request);
 
-                ReportTimeSeries series = reportTelemetryService.findSeries(
-                        tenantId,
-                        entity,
-                        telemetryQuery);
-
-                List<ReportMetricPoint> convertedPoints = convertPoints(
-                        series != null
-                                ? series.getPoints()
-                                : null,
-                        variable);
+                if (series == null
+                        || series.getPoints() == null
+                        || series.getPoints().isEmpty()) {
+                    continue;
+                }
 
                 Double value = calculationSupport.calculate(
-                        convertedPoints,
+                        series.getPoints(),
                         ReportKpiAggregationType.AVG);
 
                 if (value == null) {
                     continue;
                 }
 
-                ReportVariableMetadata metadata = variableMetadataService.resolve(
-                        variable.getKey(),
-                        variable.getLabel(),
-                        variable.getUnit());
-
                 ReportKpi kpi = new ReportKpi();
 
-                kpi.setKey(
-                        variable.getKey());
-
-                kpi.setLabel(
-                        metadata.getLabel());
-
-                kpi.setEntityName(
-                        variable.getEntityName() != null
-                                && !variable.getEntityName().isBlank()
-                                        ? variable.getEntityName()
-                                        : entity.getName());
-
-                kpi.setAggregation(
-                        ReportAggregationType.AVG);
-
-                kpi.setUnit(
-                        metadata.getUnit());
-
+                kpi.setKey(series.getKey());
+                kpi.setLabel(series.getLabel());
+                kpi.setEntityName(series.getEntityName());
+                kpi.setAggregation(ReportAggregationType.AVG);
+                kpi.setUnit(series.getUnit());
                 kpi.setValue(value);
-
                 kpi.setFormattedValue(
                         calculationSupport.format(value));
 
@@ -224,107 +248,49 @@ public class DefaultReportKpiService implements ReportKpiService {
         return result;
     }
 
-    private ReportTelemetryQuery buildTelemetryQuery(
-            ReportVariableConfig variable,
-            GenerateReportRequest request) {
-
-        ReportVariableMetadata metadata = variableMetadataService.resolve(
-                variable.getKey(),
-                variable.getLabel(),
-                variable.getUnit());
-
-        ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
-
-        telemetryQuery.setKey(
-                variable.getKey());
-
-        telemetryQuery.setLabel(
-                metadata.getLabel());
-
-        telemetryQuery.setUnit(
-                metadata.getUnit());
-
-        telemetryQuery.setStartTs(
-                request.getStartTs());
-
-        telemetryQuery.setEndTs(
-                request.getEndTs());
-
-        telemetryQuery.setAggregation(
-                ReportAggregationType.NONE);
-
-        telemetryQuery.setOrderBy("ASC");
-
-        return telemetryQuery;
-    }
-
-    private List<ReportMetricPoint> convertPoints(
-            List<ReportMetricPoint> points,
-            ReportVariableConfig variable) {
-
-        List<ReportMetricPoint> converted = new ArrayList<>();
-
-        if (points == null
-                || points.isEmpty()) {
-            return converted;
-        }
-
-        for (ReportMetricPoint point : points) {
-            if (point == null
-                    || point.getValue() == null) {
-                continue;
-            }
-
-            converted.add(
-                    new ReportMetricPoint(
-                            point.getTs(),
-                            variableConfigService.applyConversion(
-                                    variable,
-                                    point.getValue())));
-        }
-
-        return converted;
-    }
-
-    private boolean matchesEntity(
-            ReportVariableConfig variable,
-            ReportTargetEntity entity) {
-
-        if (variable == null
-                || variable.getEntityId() == null
-                || variable.getEntityId().getId() == null
-                || variable.getEntityId().getEntityType() == null
-                || entity == null
-                || entity.getEntityId() == null
-                || entity.getEntityType() == null) {
-            return false;
-        }
-
-        return variable.getEntityId()
-                .getId()
-                .equals(entity.getEntityId())
-                && variable.getEntityId()
-                        .getEntityType()
-                        .name()
-                        .equals(entity.getEntityType());
-    }
-
-    private List<ReportKpi> buildPerEntityKpis(TenantId tenantId,
+    /**
+     * Construye los KPI explícitos de una sección KPI_GRID,
+     * conservando su agregación y estado configurados.
+     */
+    private List<ReportKpi> buildPerEntityKpis(
+            TenantId tenantId,
             GenerateReportRequest request,
             List<ReportTargetEntity> entities,
             ReportKpiQuery query) {
+
+        List<ReportKpi> result = new ArrayList<>();
+
+        if (entities == null
+                || entities.isEmpty()
+                || query == null) {
+            return result;
+        }
 
         ReportVariableMetadata metadata = variableMetadataService.resolve(
                 query.getKey(),
                 query.getLabel(),
                 query.getUnit());
-        List<ReportKpi> result = new ArrayList<>();
 
         for (ReportTargetEntity entity : entities) {
-            ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(query, request);
-            ReportTimeSeries series = reportTelemetryService.findSeries(tenantId, entity, telemetryQuery);
+            ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(
+                    query,
+                    request);
 
-            Double value = calculationSupport.calculate(series.getPoints(), query.getAggregation());
+            ReportTimeSeries series = reportTelemetryService.findSeries(
+                    tenantId,
+                    entity,
+                    telemetryQuery);
+
+            if (series == null
+                    || series.getPoints() == null
+                    || series.getPoints().isEmpty()) {
+                continue;
+            }
+
+            Double value = calculationSupport.calculate(
+                    series.getPoints(),
+                    query.getAggregation());
+
             if (value == null) {
                 continue;
             }
@@ -334,7 +300,9 @@ public class DefaultReportKpiService implements ReportKpiService {
             kpi.setKey(query.getKey());
             kpi.setLabel(metadata.getLabel());
             kpi.setEntityName(entity.getName());
-            kpi.setAggregation(toReportAggregationType(query.getAggregation()));
+            kpi.setAggregation(
+                    toReportAggregationType(
+                            query.getAggregation()));
             kpi.setUnit(metadata.getUnit());
             kpi.setValue(value);
             kpi.setFormattedValue(
@@ -347,18 +315,51 @@ public class DefaultReportKpiService implements ReportKpiService {
         return result;
     }
 
-    private ReportKpi buildCombinedKpi(TenantId tenantId,
+    /**
+     * Genera un solo KPI combinando los puntos de todas las
+     * entidades seleccionadas.
+     */
+    private ReportKpi buildCombinedKpi(
+            TenantId tenantId,
             GenerateReportRequest request,
             List<ReportTargetEntity> entities,
             ReportKpiQuery query) {
+
+        if (entities == null
+                || entities.isEmpty()
+                || query == null) {
+            return null;
+        }
+
         List<ReportMetricPoint> allPoints = new ArrayList<>();
 
         for (ReportTargetEntity entity : entities) {
-            ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(query, request);
-            ReportTimeSeries series = reportTelemetryService.findSeries(tenantId, entity, telemetryQuery);
-            if (series.getPoints() != null) {
+            ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(
+                    query,
+                    request);
+
+            ReportTimeSeries series = reportTelemetryService.findSeries(
+                    tenantId,
+                    entity,
+                    telemetryQuery);
+
+            if (series != null
+                    && series.getPoints() != null
+                    && !series.getPoints().isEmpty()) {
                 allPoints.addAll(series.getPoints());
             }
+        }
+
+        if (allPoints.isEmpty()) {
+            return null;
+        }
+
+        Double value = calculationSupport.calculate(
+                allPoints,
+                query.getAggregation());
+
+        if (value == null) {
+            return null;
         }
 
         ReportVariableMetadata metadata = variableMetadataService.resolve(
@@ -366,23 +367,20 @@ public class DefaultReportKpiService implements ReportKpiService {
                 query.getLabel(),
                 query.getUnit());
 
-        Double value = calculationSupport.calculate(allPoints, query.getAggregation());
-        if (value == null) {
-            return null;
-        }
-
         ReportKpi kpi = new ReportKpi();
 
         kpi.setKey(query.getKey());
         kpi.setLabel(metadata.getLabel());
 
         /*
-         * Un KPI combinado representa múltiples entidades,
-         * por lo que no se asigna una entidad individual.
+         * Un KPI combinado representa varias entidades y por eso
+         * no se asigna un nombre de entidad individual.
          */
         kpi.setEntityName(null);
 
-        kpi.setAggregation(toReportAggregationType(query.getAggregation()));
+        kpi.setAggregation(
+                toReportAggregationType(
+                        query.getAggregation()));
         kpi.setUnit(metadata.getUnit());
         kpi.setValue(value);
         kpi.setFormattedValue(
@@ -392,52 +390,89 @@ public class DefaultReportKpiService implements ReportKpiService {
         return kpi;
     }
 
-    private ReportTelemetryQuery buildTelemetryQuery(ReportKpiQuery query,
+    /**
+     * Esta ruta se conserva para las consultas KPI_GRID.
+     *
+     * Las variables de GENERAL_STATISTICS ya utilizan
+     * ReportVariableSeriesService.
+     */
+    private ReportTelemetryQuery buildTelemetryQuery(
+            ReportKpiQuery query,
             GenerateReportRequest request) {
+
         ReportVariableMetadata metadata = variableMetadataService.resolve(
                 query.getKey(),
                 query.getLabel(),
                 query.getUnit());
 
         ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
+
         telemetryQuery.setKey(query.getKey());
         telemetryQuery.setLabel(metadata.getLabel());
         telemetryQuery.setUnit(metadata.getUnit());
-        telemetryQuery.setStartTs(request.getStartTs());
-        telemetryQuery.setEndTs(request.getEndTs());
-        telemetryQuery.setAggregation(ReportAggregationType.NONE);
+
+        if (request != null) {
+            telemetryQuery.setStartTs(request.getStartTs());
+            telemetryQuery.setEndTs(request.getEndTs());
+        }
+
+        telemetryQuery.setAggregation(
+                ReportAggregationType.NONE);
         telemetryQuery.setOrderBy("ASC");
+
         return telemetryQuery;
     }
 
-    private List<ReportKpiQuery> extractKpiQueries(JsonNode config) {
+    private List<ReportKpiQuery> extractKpiQueries(
+            JsonNode config) {
+
         List<ReportKpiQuery> result = new ArrayList<>();
-        if (config == null || config.isNull()) {
+
+        if (config == null
+                || config.isNull()) {
             return result;
         }
 
         JsonNode itemsNode = config.get("items");
-        if (itemsNode == null || !itemsNode.isArray()) {
+
+        if (itemsNode == null
+                || !itemsNode.isArray()) {
             return result;
         }
 
         for (JsonNode itemNode : itemsNode) {
-            ReportKpiQuery query = objectMapper.convertValue(itemNode, ReportKpiQuery.class);
-            result.add(query);
+            if (itemNode == null
+                    || itemNode.isNull()) {
+                continue;
+            }
+
+            ReportKpiQuery query = objectMapper.convertValue(
+                    itemNode,
+                    ReportKpiQuery.class);
+
+            if (query != null) {
+                result.add(query);
+            }
         }
 
         return result;
     }
 
-    private ReportAggregationType toReportAggregationType(ReportKpiAggregationType aggregationType) {
+    private ReportAggregationType toReportAggregationType(
+            ReportKpiAggregationType aggregationType) {
+
         if (aggregationType == null) {
             return ReportAggregationType.AVG;
         }
 
         try {
-            return ReportAggregationType.valueOf(aggregationType.name());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Unsupported KPI aggregation type: " + aggregationType, e);
+            return ReportAggregationType.valueOf(
+                    aggregationType.name());
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(
+                    "Unsupported KPI aggregation type: "
+                            + aggregationType,
+                    exception);
         }
     }
 }

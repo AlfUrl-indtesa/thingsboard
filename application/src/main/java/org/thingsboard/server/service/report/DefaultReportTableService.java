@@ -37,6 +37,7 @@ public class DefaultReportTableService implements ReportTableService {
     private final ObjectMapper objectMapper;
     private final ReportVariableMetadataService variableMetadataService;
     private final ReportVariableConfigService variableConfigService;
+    private final ReportVariableSeriesService reportVariableSeriesService;
 
     @Override
     public List<ReportTable> buildTables(ReportTemplate template,
@@ -154,58 +155,123 @@ public class DefaultReportTableService implements ReportTableService {
         return columns;
     }
 
-    private List<Map<String, Object>> buildVariableStatsRows(TenantId tenantId,
+    private List<Map<String, Object>> buildVariableStatsRows(
+            TenantId tenantId,
             GenerateReportRequest request,
             List<ReportTargetEntity> entities,
             List<ReportVariableConfig> variables) {
+
         List<Map<String, Object>> rows = new ArrayList<>();
 
         for (ReportVariableConfig variable : variables) {
             for (ReportTargetEntity entity : entities) {
-                if (!matchesEntity(variable, entity)) {
+                ReportTimeSeries series = reportVariableSeriesService.findSeries(
+                        tenantId,
+                        entity,
+                        variable,
+                        request);
+
+                if (series == null) {
                     continue;
                 }
 
-                ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(variable, request);
-                ReportTimeSeries series = reportTelemetryService.findSeries(tenantId, entity, telemetryQuery);
-                List<ReportMetricPoint> points = convertPoints(series != null ? series.getPoints() : null, variable);
-
-                Stats stats = calculateStats(points);
-                ReportVariableMetadata metadata = variableMetadataService.resolve(
-                        variable.getKey(),
-                        variable.getLabel(),
-                        variable.getUnit());
+                Stats stats = calculateStats(
+                        series.getPoints());
 
                 Map<String, Object> row = new LinkedHashMap<>();
-                row.put("entity", variable.getEntityName() != null && !variable.getEntityName().isBlank()
-                        ? variable.getEntityName()
-                        : entity.getName());
-                row.put("variable", metadata.getLabel());
-                row.put("unit", metadata.getUnit() != null && !metadata.getUnit().isBlank() ? metadata.getUnit() : "-");
 
-                if (variable.getStats() == null || !Boolean.FALSE.equals(variable.getStats().getCount())) {
-                    row.put("count", stats.count);
+                row.put(
+                        "entity",
+                        series.getEntityName());
+
+                row.put(
+                        "variable",
+                        series.getLabel());
+
+                row.put(
+                        "unit",
+                        series.getUnit() != null
+                                && !series.getUnit().isBlank()
+                                        ? series.getUnit()
+                                        : "-");
+
+                if (variable.getStats() == null
+                        || !Boolean.FALSE.equals(
+                                variable.getStats().getCount())) {
+                    row.put(
+                            "count",
+                            stats.count);
                 }
-                if (variable.getStats() == null || !Boolean.FALSE.equals(variable.getStats().getMin())) {
-                    row.put("min", stats.hasData ? calculationSupport.format(stats.min) : "-");
+
+                if (variable.getStats() == null
+                        || !Boolean.FALSE.equals(
+                                variable.getStats().getMin())) {
+                    row.put(
+                            "min",
+                            stats.hasData
+                                    ? calculationSupport.format(stats.min)
+                                    : "-");
                 }
-                if (variable.getStats() == null || !Boolean.FALSE.equals(variable.getStats().getMax())) {
-                    row.put("max", stats.hasData ? calculationSupport.format(stats.max) : "-");
+
+                if (variable.getStats() == null
+                        || !Boolean.FALSE.equals(
+                                variable.getStats().getMax())) {
+                    row.put(
+                            "max",
+                            stats.hasData
+                                    ? calculationSupport.format(stats.max)
+                                    : "-");
                 }
-                if (variable.getStats() == null || !Boolean.FALSE.equals(variable.getStats().getAvg())) {
-                    row.put("avg", stats.hasData ? calculationSupport.format(stats.avg) : "-");
+
+                if (variable.getStats() == null
+                        || !Boolean.FALSE.equals(
+                                variable.getStats().getAvg())) {
+                    row.put(
+                            "avg",
+                            stats.hasData
+                                    ? calculationSupport.format(stats.avg)
+                                    : "-");
                 }
-                if (variable.getStats() != null && Boolean.TRUE.equals(variable.getStats().getSum())) {
-                    row.put("sum", stats.hasData ? calculationSupport.format(stats.sum) : "-");
+
+                if (variable.getStats() != null
+                        && Boolean.TRUE.equals(
+                                variable.getStats().getSum())) {
+                    row.put(
+                            "sum",
+                            stats.hasData
+                                    ? calculationSupport.format(stats.sum)
+                                    : "-");
                 }
-                if (variable.getStats() != null && Boolean.TRUE.equals(variable.getStats().getFirst())) {
-                    row.put("first", stats.hasData ? calculationSupport.format(stats.first) : "-");
+
+                if (variable.getStats() != null
+                        && Boolean.TRUE.equals(
+                                variable.getStats().getFirst())) {
+                    row.put(
+                            "first",
+                            stats.hasData
+                                    ? calculationSupport.format(stats.first)
+                                    : "-");
                 }
-                if (variable.getStats() != null && Boolean.TRUE.equals(variable.getStats().getLast())) {
-                    row.put("last", stats.hasData ? calculationSupport.format(stats.last) : "-");
+
+                if (variable.getStats() != null
+                        && Boolean.TRUE.equals(
+                                variable.getStats().getLast())) {
+                    row.put(
+                            "last",
+                            stats.hasData
+                                    ? calculationSupport.format(stats.last)
+                                    : "-");
                 }
-                if (variable.getStats() != null && Boolean.TRUE.equals(variable.getStats().getDelta())) {
-                    row.put("delta", stats.hasData ? calculationSupport.format(stats.last - stats.first) : "-");
+
+                if (variable.getStats() != null
+                        && Boolean.TRUE.equals(
+                                variable.getStats().getDelta())) {
+                    row.put(
+                            "delta",
+                            stats.hasData
+                                    ? calculationSupport.format(
+                                            stats.last - stats.first)
+                                    : "-");
                 }
 
                 rows.add(row);
@@ -298,23 +364,6 @@ public class DefaultReportTableService implements ReportTableService {
         return rows;
     }
 
-    private ReportTelemetryQuery buildTelemetryQuery(ReportVariableConfig variable,
-            GenerateReportRequest request) {
-        ReportVariableMetadata metadata = variableMetadataService.resolve(
-                variable.getKey(),
-                variable.getLabel(),
-                variable.getUnit());
-
-        ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
-        telemetryQuery.setKey(variable.getKey());
-        telemetryQuery.setLabel(metadata.getLabel());
-        telemetryQuery.setUnit(metadata.getUnit());
-        telemetryQuery.setStartTs(request.getStartTs());
-        telemetryQuery.setEndTs(request.getEndTs());
-        telemetryQuery.setAggregation(org.thingsboard.server.common.data.report.ReportAggregationType.NONE);
-        telemetryQuery.setOrderBy("ASC");
-        return telemetryQuery;
-    }
 
     private ReportTelemetryQuery buildTelemetryQuery(ReportTableQuery query,
             GenerateReportRequest request) {
@@ -332,27 +381,6 @@ public class DefaultReportTableService implements ReportTableService {
         telemetryQuery.setAggregation(mapTelemetryAggregation(query.getAggregation()));
         telemetryQuery.setOrderBy("ASC");
         return telemetryQuery;
-    }
-
-    private List<ReportMetricPoint> convertPoints(List<ReportMetricPoint> points,
-            ReportVariableConfig variable) {
-        List<ReportMetricPoint> converted = new ArrayList<>();
-
-        if (points == null || points.isEmpty()) {
-            return converted;
-        }
-
-        for (ReportMetricPoint point : points) {
-            if (point == null || point.getValue() == null) {
-                continue;
-            }
-
-            converted.add(new ReportMetricPoint(
-                    point.getTs(),
-                    variableConfigService.applyConversion(variable, point.getValue())));
-        }
-
-        return converted;
     }
 
     private Stats calculateStats(List<ReportMetricPoint> points) {
@@ -389,15 +417,6 @@ public class DefaultReportTableService implements ReportTableService {
         }
 
         return stats;
-    }
-
-    private boolean matchesEntity(ReportVariableConfig variable, ReportTargetEntity entity) {
-        if (variable == null || variable.getEntityId() == null || entity == null) {
-            return false;
-        }
-
-        return variable.getEntityId().getId().equals(entity.getEntityId())
-                && variable.getEntityId().getEntityType().name().equals(entity.getEntityType());
     }
 
     private ReportTableColumn column(String key, String label, String align) {

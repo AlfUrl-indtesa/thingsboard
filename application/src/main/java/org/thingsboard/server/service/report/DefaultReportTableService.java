@@ -51,7 +51,8 @@ public class DefaultReportTableService implements ReportTableService {
         TenantId tenantId = template.getTenantId();
 
         for (ReportSectionConfig section : template.getSections()) {
-            if (section.getType() != ReportSectionType.TABLE || !Boolean.TRUE.equals(section.getVisible())) {
+            if (!isStatisticsSection(section)
+                    || Boolean.FALSE.equals(section.getVisible())) {
                 continue;
             }
 
@@ -448,5 +449,17 @@ public class DefaultReportTableService implements ReportTableService {
         double sum = 0;
         double first = 0;
         double last = 0;
+    }
+
+    private boolean isStatisticsSection(
+            ReportSectionConfig section) {
+
+        if (section == null
+                || section.getType() == null) {
+            return false;
+        }
+
+        return section.getType() == ReportSectionType.TABLE
+                || section.getType() == ReportSectionType.GENERAL_STATISTICS;
     }
 }

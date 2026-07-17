@@ -1,3 +1,8 @@
+/**
+ * Copyright © 2016-2026 The Thingsboard Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ */
 package org.thingsboard.server.service.report;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -6,7 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.report.GenerateReportRequest;
-import org.thingsboard.server.common.data.report.ReportKpiAggregationType;
+import org.thingsboard.server.common.data.report.ReportAggregationType;
 import org.thingsboard.server.common.data.report.ReportMetricPoint;
 import org.thingsboard.server.common.data.report.ReportSectionConfig;
 import org.thingsboard.server.common.data.report.ReportSectionType;
@@ -32,51 +37,120 @@ public class DefaultReportTableService implements ReportTableService {
     private static final String ENTITY_COLUMN_KEY = "entity";
     private static final String ENTITY_COLUMN_LABEL = "Equipo";
 
+    private static final String VARIABLE_COLUMN_KEY = "variable";
+    private static final String UNIT_COLUMN_KEY = "unit";
+
+    /*
+     * Se conserva para las secciones TABLE tradicionales,
+     * configuradas mediante ReportTableQuery.
+     */
     private final ReportTelemetryService reportTelemetryService;
+
     private final ReportKpiCalculationSupport calculationSupport;
+
     private final ObjectMapper objectMapper;
+
+    /*
+     * Se conserva para resolver label y unidad de las
+     * consultas ReportTableQuery tradicionales.
+     */
     private final ReportVariableMetadataService variableMetadataService;
+
+    /*
+     * Extrae la configuración estructurada de variables
+     * utilizada por GENERAL_STATISTICS.
+     */
     private final ReportVariableConfigService variableConfigService;
+
+    /*
+     * Centraliza para las variables del revamp:
+     *
+     * - validación de entidad;
+     * - construcción de consultas;
+     * - label y unidad;
+     * - nombre visible de entidad;
+     * - escala y offset;
+     * - reutilización de la caché de telemetría.
+     */
     private final ReportVariableSeriesService reportVariableSeriesService;
 
     @Override
-    public List<ReportTable> buildTables(ReportTemplate template,
+    public List<ReportTable> buildTables(
+            ReportTemplate template,
             GenerateReportRequest request,
             List<ReportTargetEntity> entities) {
+
         List<ReportTable> result = new ArrayList<>();
 
-        if (template == null || template.getSections() == null || template.getSections().isEmpty()) {
+        if (template == null
+                || template.getSections() == null
+                || template.getSections().isEmpty()) {
             return result;
         }
 
         TenantId tenantId = template.getTenantId();
 
         for (ReportSectionConfig section : template.getSections()) {
+
             if (!isStatisticsSection(section)
-                    || Boolean.FALSE.equals(section.getVisible())) {
+                    || Boolean.FALSE.equals(
+                            section.getVisible())) {
                 continue;
             }
 
-            List<ReportVariableConfig> variables = variableConfigService.extractVariables(section.getConfig());
+            /*
+             * Estructura utilizada por el revamp actual:
+             * GENERAL_STATISTICS contiene ReportVariableConfig.
+             */
+            List<ReportVariableConfig> variables = variableConfigService.extractVariables(
+                    section.getConfig());
+
             List<ReportVariableConfig> tableVariables = variables.stream()
-                    .filter(variable -> !Boolean.FALSE.equals(variable.getEnabled()))
-                    .filter(variable -> !Boolean.FALSE.equals(variable.getTableEnabled()))
+                    .filter(variable -> variable != null)
+                    .filter(variable -> !Boolean.FALSE.equals(
+                            variable.getEnabled()))
+                    .filter(variable -> !Boolean.FALSE.equals(
+                            variable.getTableEnabled()))
                     .toList();
 
             if (!tableVariables.isEmpty()) {
-                ReportTable table = buildVariableStatsTable(tenantId, request, entities, section, tableVariables);
+                ReportTable table = buildVariableStatsTable(
+                        tenantId,
+                        request,
+                        entities,
+                        section,
+                        tableVariables);
+
                 if (table != null) {
                     result.add(table);
                 }
+
+                /*
+                 * La sección ya fue procesada mediante variables
+                 * estructuradas. No se procesan también columnas
+                 * tradicionales para evitar tablas duplicadas.
+                 */
                 continue;
             }
 
-            List<ReportTableQuery> queries = extractTableQueries(section.getConfig());
+            /*
+             * Compatibilidad con secciones TABLE tradicionales,
+             * configuradas mediante un arreglo "columns".
+             */
+            List<ReportTableQuery> queries = extractTableQueries(
+                    section.getConfig());
+
             if (queries.isEmpty()) {
                 continue;
             }
 
-            ReportTable table = buildTableForSection(tenantId, request, entities, section, queries);
+            ReportTable table = buildTableForSection(
+                    tenantId,
+                    request,
+                    entities,
+                    section,
+                    queries);
+
             if (table != null) {
                 result.add(table);
             }
@@ -85,76 +159,203 @@ public class DefaultReportTableService implements ReportTableService {
         return result;
     }
 
-    private ReportTable buildVariableStatsTable(TenantId tenantId,
+    /**
+     * Construye la tabla general de estadísticas del revamp.
+     */
+    private ReportTable buildVariableStatsTable(
+            TenantId tenantId,
             GenerateReportRequest request,
             List<ReportTargetEntity> entities,
             ReportSectionConfig section,
             List<ReportVariableConfig> variables) {
-        if (entities == null || entities.isEmpty()) {
+
+        if (entities == null
+                || entities.isEmpty()
+                || variables == null
+                || variables.isEmpty()) {
             return null;
         }
 
         ReportTable table = new ReportTable();
-        table.setKey(section.getKey());
-        table.setTitle(section.getTitle());
-        table.setColumns(buildVariableStatsColumns(variables));
-        table.setRows(buildVariableStatsRows(tenantId, request, entities, variables));
+
+        table.setKey(
+                section.getKey());
+
+        table.setTitle(
+                section.getTitle());
+
+        table.setColumns(
+                buildVariableStatsColumns(
+                        variables));
+
+        table.setRows(
+                buildVariableStatsRows(
+                        tenantId,
+                        request,
+                        entities,
+                        variables));
 
         return table;
     }
 
-    private List<ReportTableColumn> buildVariableStatsColumns(List<ReportVariableConfig> variables) {
+    /**
+     * Define las columnas visibles de acuerdo con las estadísticas
+     * habilitadas en cada variable.
+     */
+    private List<ReportTableColumn> buildVariableStatsColumns(
+            List<ReportVariableConfig> variables) {
+
         List<ReportTableColumn> columns = new ArrayList<>();
 
-        columns.add(column("entity", "Equipo", "left"));
-        columns.add(column("variable", "Variable", "left"));
-        columns.add(column("unit", "Unidad", "left"));
+        columns.add(
+                column(
+                        ENTITY_COLUMN_KEY,
+                        ENTITY_COLUMN_LABEL,
+                        "left"));
+
+        columns.add(
+                column(
+                        VARIABLE_COLUMN_KEY,
+                        "Variable",
+                        "left"));
+
+        columns.add(
+                column(
+                        UNIT_COLUMN_KEY,
+                        "Unidad",
+                        "left"));
 
         boolean includeCount = variables.stream()
-                .anyMatch(v -> v.getStats() == null || !Boolean.FALSE.equals(v.getStats().getCount()));
+                .filter(variable -> variable != null)
+                .anyMatch(variable -> variable.getStats() == null
+                        || !Boolean.FALSE.equals(
+                                variable.getStats()
+                                        .getCount()));
+
         boolean includeMin = variables.stream()
-                .anyMatch(v -> v.getStats() == null || !Boolean.FALSE.equals(v.getStats().getMin()));
+                .filter(variable -> variable != null)
+                .anyMatch(variable -> variable.getStats() == null
+                        || !Boolean.FALSE.equals(
+                                variable.getStats()
+                                        .getMin()));
+
         boolean includeMax = variables.stream()
-                .anyMatch(v -> v.getStats() == null || !Boolean.FALSE.equals(v.getStats().getMax()));
+                .filter(variable -> variable != null)
+                .anyMatch(variable -> variable.getStats() == null
+                        || !Boolean.FALSE.equals(
+                                variable.getStats()
+                                        .getMax()));
+
         boolean includeAvg = variables.stream()
-                .anyMatch(v -> v.getStats() == null || !Boolean.FALSE.equals(v.getStats().getAvg()));
+                .filter(variable -> variable != null)
+                .anyMatch(variable -> variable.getStats() == null
+                        || !Boolean.FALSE.equals(
+                                variable.getStats()
+                                        .getAvg()));
+
         boolean includeSum = variables.stream()
-                .anyMatch(v -> v.getStats() != null && Boolean.TRUE.equals(v.getStats().getSum()));
+                .filter(variable -> variable != null)
+                .anyMatch(variable -> variable.getStats() != null
+                        && Boolean.TRUE.equals(
+                                variable.getStats()
+                                        .getSum()));
+
         boolean includeFirst = variables.stream()
-                .anyMatch(v -> v.getStats() != null && Boolean.TRUE.equals(v.getStats().getFirst()));
+                .filter(variable -> variable != null)
+                .anyMatch(variable -> variable.getStats() != null
+                        && Boolean.TRUE.equals(
+                                variable.getStats()
+                                        .getFirst()));
+
         boolean includeLast = variables.stream()
-                .anyMatch(v -> v.getStats() != null && Boolean.TRUE.equals(v.getStats().getLast()));
+                .filter(variable -> variable != null)
+                .anyMatch(variable -> variable.getStats() != null
+                        && Boolean.TRUE.equals(
+                                variable.getStats()
+                                        .getLast()));
+
         boolean includeDelta = variables.stream()
-                .anyMatch(v -> v.getStats() != null && Boolean.TRUE.equals(v.getStats().getDelta()));
+                .filter(variable -> variable != null)
+                .anyMatch(variable -> variable.getStats() != null
+                        && Boolean.TRUE.equals(
+                                variable.getStats()
+                                        .getDelta()));
 
         if (includeCount) {
-            columns.add(column("count", "Muestras", "right"));
+            columns.add(
+                    column(
+                            "count",
+                            "Muestras",
+                            "right"));
         }
+
         if (includeMin) {
-            columns.add(column("min", "Mínimo", "right"));
+            columns.add(
+                    column(
+                            "min",
+                            "Mínimo",
+                            "right"));
         }
+
         if (includeMax) {
-            columns.add(column("max", "Máximo", "right"));
+            columns.add(
+                    column(
+                            "max",
+                            "Máximo",
+                            "right"));
         }
+
         if (includeAvg) {
-            columns.add(column("avg", "Promedio", "right"));
+            columns.add(
+                    column(
+                            "avg",
+                            "Promedio",
+                            "right"));
         }
+
         if (includeSum) {
-            columns.add(column("sum", "Suma", "right"));
+            columns.add(
+                    column(
+                            "sum",
+                            "Suma",
+                            "right"));
         }
+
         if (includeFirst) {
-            columns.add(column("first", "Primero", "right"));
+            columns.add(
+                    column(
+                            "first",
+                            "Primero",
+                            "right"));
         }
+
         if (includeLast) {
-            columns.add(column("last", "Último", "right"));
+            columns.add(
+                    column(
+                            "last",
+                            "Último",
+                            "right"));
         }
+
         if (includeDelta) {
-            columns.add(column("delta", "Delta", "right"));
+            columns.add(
+                    column(
+                            "delta",
+                            "Delta",
+                            "right"));
         }
 
         return columns;
     }
 
+    /**
+     * Genera una fila por cada combinación válida:
+     *
+     * entidad + variable.
+     *
+     * ReportVariableSeriesService entrega los puntos con escala
+     * y offset ya aplicados.
+     */
     private List<Map<String, Object>> buildVariableStatsRows(
             TenantId tenantId,
             GenerateReportRequest request,
@@ -163,8 +364,25 @@ public class DefaultReportTableService implements ReportTableService {
 
         List<Map<String, Object>> rows = new ArrayList<>();
 
+        if (entities == null
+                || entities.isEmpty()
+                || variables == null
+                || variables.isEmpty()) {
+            return rows;
+        }
+
         for (ReportVariableConfig variable : variables) {
+            if (variable == null
+                    || variable.getKey() == null
+                    || variable.getKey().isBlank()) {
+                continue;
+            }
+
             for (ReportTargetEntity entity : entities) {
+                /*
+                 * Devuelve null cuando la variable no corresponde
+                 * a la entidad actual.
+                 */
                 ReportTimeSeries series = reportVariableSeriesService.findSeries(
                         tenantId,
                         entity,
@@ -181,97 +399,79 @@ public class DefaultReportTableService implements ReportTableService {
                 Map<String, Object> row = new LinkedHashMap<>();
 
                 row.put(
-                        "entity",
+                        ENTITY_COLUMN_KEY,
                         series.getEntityName());
 
                 row.put(
-                        "variable",
+                        VARIABLE_COLUMN_KEY,
                         series.getLabel());
 
                 row.put(
-                        "unit",
-                        series.getUnit() != null
-                                && !series.getUnit().isBlank()
-                                        ? series.getUnit()
-                                        : "-");
+                        UNIT_COLUMN_KEY,
+                        hasText(series.getUnit())
+                                ? series.getUnit()
+                                : "-");
 
-                if (variable.getStats() == null
-                        || !Boolean.FALSE.equals(
-                                variable.getStats().getCount())) {
+                if (isCountEnabled(variable)) {
                     row.put(
                             "count",
                             stats.count);
                 }
 
-                if (variable.getStats() == null
-                        || !Boolean.FALSE.equals(
-                                variable.getStats().getMin())) {
+                if (isMinEnabled(variable)) {
                     row.put(
                             "min",
-                            stats.hasData
-                                    ? calculationSupport.format(stats.min)
-                                    : "-");
+                            formatStatistic(
+                                    stats.hasData,
+                                    stats.min));
                 }
 
-                if (variable.getStats() == null
-                        || !Boolean.FALSE.equals(
-                                variable.getStats().getMax())) {
+                if (isMaxEnabled(variable)) {
                     row.put(
                             "max",
-                            stats.hasData
-                                    ? calculationSupport.format(stats.max)
-                                    : "-");
+                            formatStatistic(
+                                    stats.hasData,
+                                    stats.max));
                 }
 
-                if (variable.getStats() == null
-                        || !Boolean.FALSE.equals(
-                                variable.getStats().getAvg())) {
+                if (isAvgEnabled(variable)) {
                     row.put(
                             "avg",
-                            stats.hasData
-                                    ? calculationSupport.format(stats.avg)
-                                    : "-");
+                            formatStatistic(
+                                    stats.hasData,
+                                    stats.avg));
                 }
 
-                if (variable.getStats() != null
-                        && Boolean.TRUE.equals(
-                                variable.getStats().getSum())) {
+                if (isSumEnabled(variable)) {
                     row.put(
                             "sum",
-                            stats.hasData
-                                    ? calculationSupport.format(stats.sum)
-                                    : "-");
+                            formatStatistic(
+                                    stats.hasData,
+                                    stats.sum));
                 }
 
-                if (variable.getStats() != null
-                        && Boolean.TRUE.equals(
-                                variable.getStats().getFirst())) {
+                if (isFirstEnabled(variable)) {
                     row.put(
                             "first",
-                            stats.hasData
-                                    ? calculationSupport.format(stats.first)
-                                    : "-");
+                            formatStatistic(
+                                    stats.hasData,
+                                    stats.first));
                 }
 
-                if (variable.getStats() != null
-                        && Boolean.TRUE.equals(
-                                variable.getStats().getLast())) {
+                if (isLastEnabled(variable)) {
                     row.put(
                             "last",
-                            stats.hasData
-                                    ? calculationSupport.format(stats.last)
-                                    : "-");
+                            formatStatistic(
+                                    stats.hasData,
+                                    stats.last));
                 }
 
-                if (variable.getStats() != null
-                        && Boolean.TRUE.equals(
-                                variable.getStats().getDelta())) {
+                if (isDeltaEnabled(variable)) {
                     row.put(
                             "delta",
-                            stats.hasData
-                                    ? calculationSupport.format(
-                                            stats.last - stats.first)
-                                    : "-");
+                            formatStatistic(
+                                    stats.hasData,
+                                    stats.last - stats.first));
                 }
 
                 rows.add(row);
@@ -281,81 +481,157 @@ public class DefaultReportTableService implements ReportTableService {
         return rows;
     }
 
-    private ReportTable buildTableForSection(TenantId tenantId,
+    /**
+     * Construye una tabla tradicional basada en ReportTableQuery.
+     */
+    private ReportTable buildTableForSection(
+            TenantId tenantId,
             GenerateReportRequest request,
             List<ReportTargetEntity> entities,
             ReportSectionConfig section,
             List<ReportTableQuery> queries) {
-        if (entities == null || entities.isEmpty()) {
+
+        if (entities == null
+                || entities.isEmpty()
+                || queries == null
+                || queries.isEmpty()) {
             return null;
         }
 
         ReportTable table = new ReportTable();
-        table.setKey(section.getKey());
-        table.setTitle(section.getTitle());
-        table.setColumns(buildColumns(queries));
-        table.setRows(buildRows(tenantId, request, entities, queries));
+
+        table.setKey(
+                section.getKey());
+
+        table.setTitle(
+                section.getTitle());
+
+        table.setColumns(
+                buildColumns(
+                        queries));
+
+        table.setRows(
+                buildRows(
+                        tenantId,
+                        request,
+                        entities,
+                        queries));
 
         return table;
     }
 
-    private List<ReportTableColumn> buildColumns(List<ReportTableQuery> queries) {
+    private List<ReportTableColumn> buildColumns(
+            List<ReportTableQuery> queries) {
+
         List<ReportTableColumn> columns = new ArrayList<>();
 
-        ReportTableColumn entityColumn = new ReportTableColumn();
-        entityColumn.setKey(ENTITY_COLUMN_KEY);
-        entityColumn.setLabel(ENTITY_COLUMN_LABEL);
-        entityColumn.setAlign("left");
-        columns.add(entityColumn);
+        columns.add(
+                column(
+                        ENTITY_COLUMN_KEY,
+                        ENTITY_COLUMN_LABEL,
+                        "left"));
 
         for (ReportTableQuery query : queries) {
-            ReportTableColumn column = new ReportTableColumn();
-            column.setKey(resolveColumnKey(query));
+            if (query == null
+                    || query.getKey() == null
+                    || query.getKey().isBlank()) {
+                continue;
+            }
+
             ReportVariableMetadata metadata = variableMetadataService.resolve(
                     query.getKey(),
                     query.getLabel(),
                     query.getUnit());
 
             String label = metadata.getLabel();
-            if (metadata.getUnit() != null && !metadata.getUnit().isBlank()) {
-                label = label + " (" + metadata.getUnit() + ")";
+
+            if (hasText(metadata.getUnit())) {
+                label = label
+                        + " ("
+                        + metadata.getUnit()
+                        + ")";
             }
 
-            column.setLabel(label);
-            column.setAlign(query.getAlign() != null ? query.getAlign() : "right");
-            columns.add(column);
+            columns.add(
+                    column(
+                            resolveColumnKey(query),
+                            label,
+                            hasText(query.getAlign())
+                                    ? query.getAlign()
+                                    : "right"));
         }
 
         return columns;
     }
 
-    private List<Map<String, Object>> buildRows(TenantId tenantId,
+    private List<Map<String, Object>> buildRows(
+            TenantId tenantId,
             GenerateReportRequest request,
             List<ReportTargetEntity> entities,
             List<ReportTableQuery> queries) {
+
         List<Map<String, Object>> rows = new ArrayList<>();
+
+        if (entities == null
+                || entities.isEmpty()
+                || queries == null
+                || queries.isEmpty()) {
+            return rows;
+        }
 
         for (ReportTargetEntity entity : entities) {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put(ENTITY_COLUMN_KEY, entity.getName());
+
+            row.put(
+                    ENTITY_COLUMN_KEY,
+                    entity.getName());
 
             for (ReportTableQuery query : queries) {
-                ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(query, request);
-                ReportTimeSeries series = reportTelemetryService.findSeries(tenantId, entity, telemetryQuery);
+                if (query == null
+                        || query.getKey() == null
+                        || query.getKey().isBlank()) {
+                    continue;
+                }
 
-                Double value = calculationSupport.calculate(series.getPoints(), query.getAggregation());
-                String formattedValue = value != null ? calculationSupport.format(value) : null;
+                ReportTelemetryQuery telemetryQuery = buildTelemetryQuery(
+                        query,
+                        request);
+
+                ReportTimeSeries series = reportTelemetryService.findSeries(
+                        tenantId,
+                        entity,
+                        telemetryQuery);
+
+                List<ReportMetricPoint> points = series != null
+                        && series.getPoints() != null
+                                ? series.getPoints()
+                                : List.of();
+
+                Double value = calculationSupport.calculate(
+                        points,
+                        query.getAggregation());
+
+                String formattedValue = value != null
+                        ? calculationSupport.format(value)
+                        : null;
 
                 ReportVariableMetadata metadata = variableMetadataService.resolve(
                         query.getKey(),
                         query.getLabel(),
                         query.getUnit());
 
-                if (formattedValue != null && metadata.getUnit() != null && !metadata.getUnit().isBlank()) {
-                    formattedValue = formattedValue + " " + metadata.getUnit();
+                if (formattedValue != null
+                        && hasText(metadata.getUnit())) {
+                    formattedValue = formattedValue
+                            + " "
+                            + metadata.getUnit();
                 }
 
-                row.put(resolveColumnKey(query), formattedValue);
+                row.put(
+                        resolveColumnKey(query),
+                        formattedValue != null
+                                ? formattedValue
+                                : "-");
             }
 
             rows.add(row);
@@ -364,34 +640,71 @@ public class DefaultReportTableService implements ReportTableService {
         return rows;
     }
 
-
-    private ReportTelemetryQuery buildTelemetryQuery(ReportTableQuery query,
+    /**
+     * Construye únicamente las consultas tradicionales
+     * basadas en ReportTableQuery.
+     *
+     * Las variables del revamp utilizan ReportVariableSeriesService.
+     */
+    private ReportTelemetryQuery buildTelemetryQuery(
+            ReportTableQuery query,
             GenerateReportRequest request) {
+
         ReportVariableMetadata metadata = variableMetadataService.resolve(
                 query.getKey(),
                 query.getLabel(),
                 query.getUnit());
 
         ReportTelemetryQuery telemetryQuery = new ReportTelemetryQuery();
-        telemetryQuery.setKey(query.getKey());
-        telemetryQuery.setLabel(metadata.getLabel());
-        telemetryQuery.setUnit(metadata.getUnit());
-        telemetryQuery.setStartTs(request.getStartTs());
-        telemetryQuery.setEndTs(request.getEndTs());
-        telemetryQuery.setAggregation(mapTelemetryAggregation(query.getAggregation()));
+
+        telemetryQuery.setKey(
+                query.getKey());
+
+        telemetryQuery.setLabel(
+                metadata.getLabel());
+
+        telemetryQuery.setUnit(
+                metadata.getUnit());
+
+        if (request != null) {
+            telemetryQuery.setStartTs(
+                    request.getStartTs());
+
+            telemetryQuery.setEndTs(
+                    request.getEndTs());
+        }
+
+        /*
+         * La agregación se calcula localmente sobre los puntos
+         * crudos mediante ReportKpiCalculationSupport.
+         */
+        telemetryQuery.setAggregation(
+                ReportAggregationType.NONE);
+
         telemetryQuery.setOrderBy("ASC");
+
         return telemetryQuery;
     }
 
-    private Stats calculateStats(List<ReportMetricPoint> points) {
+    /**
+     * Calcula las estadísticas sobre los puntos ya convertidos.
+     *
+     * La lista se considera cronológica porque las consultas del
+     * servicio central utilizan orderBy ASC.
+     */
+    private Stats calculateStats(
+            List<ReportMetricPoint> points) {
+
         Stats stats = new Stats();
 
-        if (points == null || points.isEmpty()) {
+        if (points == null
+                || points.isEmpty()) {
             return stats;
         }
 
         for (ReportMetricPoint point : points) {
-            if (point == null || point.getValue() == null) {
+            if (point == null
+                    || point.getValue() == null) {
                 continue;
             }
 
@@ -407,8 +720,15 @@ public class DefaultReportTableService implements ReportTableService {
 
             stats.count++;
             stats.sum += value;
-            stats.min = Math.min(stats.min, value);
-            stats.max = Math.max(stats.max, value);
+
+            stats.min = Math.min(
+                    stats.min,
+                    value);
+
+            stats.max = Math.max(
+                    stats.max,
+                    value);
+
             stats.last = value;
         }
 
@@ -419,55 +739,136 @@ public class DefaultReportTableService implements ReportTableService {
         return stats;
     }
 
-    private ReportTableColumn column(String key, String label, String align) {
+    private String formatStatistic(
+            boolean hasData,
+            double value) {
+
+        return hasData
+                ? calculationSupport.format(value)
+                : "-";
+    }
+
+    private boolean isCountEnabled(
+            ReportVariableConfig variable) {
+
+        return variable.getStats() == null
+                || !Boolean.FALSE.equals(
+                        variable.getStats().getCount());
+    }
+
+    private boolean isMinEnabled(
+            ReportVariableConfig variable) {
+
+        return variable.getStats() == null
+                || !Boolean.FALSE.equals(
+                        variable.getStats().getMin());
+    }
+
+    private boolean isMaxEnabled(
+            ReportVariableConfig variable) {
+
+        return variable.getStats() == null
+                || !Boolean.FALSE.equals(
+                        variable.getStats().getMax());
+    }
+
+    private boolean isAvgEnabled(
+            ReportVariableConfig variable) {
+
+        return variable.getStats() == null
+                || !Boolean.FALSE.equals(
+                        variable.getStats().getAvg());
+    }
+
+    private boolean isSumEnabled(
+            ReportVariableConfig variable) {
+
+        return variable.getStats() != null
+                && Boolean.TRUE.equals(
+                        variable.getStats().getSum());
+    }
+
+    private boolean isFirstEnabled(
+            ReportVariableConfig variable) {
+
+        return variable.getStats() != null
+                && Boolean.TRUE.equals(
+                        variable.getStats().getFirst());
+    }
+
+    private boolean isLastEnabled(
+            ReportVariableConfig variable) {
+
+        return variable.getStats() != null
+                && Boolean.TRUE.equals(
+                        variable.getStats().getLast());
+    }
+
+    private boolean isDeltaEnabled(
+            ReportVariableConfig variable) {
+
+        return variable.getStats() != null
+                && Boolean.TRUE.equals(
+                        variable.getStats().getDelta());
+    }
+
+    private ReportTableColumn column(
+            String key,
+            String label,
+            String align) {
+
         ReportTableColumn column = new ReportTableColumn();
+
         column.setKey(key);
         column.setLabel(label);
         column.setAlign(align);
+
         return column;
     }
 
-    private String resolveColumnKey(ReportTableQuery query) {
-        if (query.getColumnKey() != null && !query.getColumnKey().isBlank()) {
+    private String resolveColumnKey(
+            ReportTableQuery query) {
+
+        if (hasText(query.getColumnKey())) {
             return query.getColumnKey();
         }
+
         return query.getKey();
     }
 
-    private List<ReportTableQuery> extractTableQueries(JsonNode config) {
+    private List<ReportTableQuery> extractTableQueries(
+            JsonNode config) {
+
         List<ReportTableQuery> result = new ArrayList<>();
 
-        if (config == null || config.isNull()) {
+        if (config == null
+                || config.isNull()) {
             return result;
         }
 
         JsonNode columnsNode = config.get("columns");
-        if (columnsNode == null || !columnsNode.isArray()) {
+
+        if (columnsNode == null
+                || !columnsNode.isArray()) {
             return result;
         }
 
         for (JsonNode itemNode : columnsNode) {
-            ReportTableQuery query = objectMapper.convertValue(itemNode, ReportTableQuery.class);
-            result.add(query);
+            if (itemNode == null
+                    || itemNode.isNull()) {
+                continue;
+            }
+
+            ReportTableQuery query = objectMapper.convertValue(
+                    itemNode,
+                    ReportTableQuery.class);
+
+            if (query != null) {
+                result.add(query);
+            }
         }
 
         return result;
-    }
-
-    private org.thingsboard.server.common.data.report.ReportAggregationType mapTelemetryAggregation(
-            ReportKpiAggregationType aggregation) {
-        return org.thingsboard.server.common.data.report.ReportAggregationType.NONE;
-    }
-
-    private static class Stats {
-        boolean hasData = false;
-        int count = 0;
-        double min = 0;
-        double max = 0;
-        double avg = 0;
-        double sum = 0;
-        double first = 0;
-        double last = 0;
     }
 
     private boolean isStatisticsSection(
@@ -480,5 +881,27 @@ public class DefaultReportTableService implements ReportTableService {
 
         return section.getType() == ReportSectionType.TABLE
                 || section.getType() == ReportSectionType.GENERAL_STATISTICS;
+    }
+
+    private boolean hasText(
+            String value) {
+
+        return value != null
+                && !value.isBlank();
+    }
+
+    private static final class Stats {
+
+        private boolean hasData;
+
+        private int count;
+
+        private double min;
+        private double max;
+        private double avg;
+        private double sum;
+
+        private double first;
+        private double last;
     }
 }

@@ -1,82 +1,77 @@
+/**
+ * Copyright © 2016-2026 The Thingsboard Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ */
 package org.thingsboard.server.service.report;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.thingsboard.server.common.data.report.ReportKpiAggregationType;
 import org.thingsboard.server.common.data.report.ReportMetricPoint;
+import org.thingsboard.server.common.data.report.ReportSeriesStatistics;
 
+import java.math.RoundingMode;
 import java.text.DecimalFormat;
-import java.util.Comparator;
+import java.text.DecimalFormatSymbols;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Locale;
 
 @Component
+@RequiredArgsConstructor
 public class ReportKpiCalculationSupport {
 
-    private static final DecimalFormat DEFAULT_FORMAT = new DecimalFormat("#,##0.###");
+    /**
+     * DecimalFormat no es thread-safe.
+     *
+     * Cada hilo de generación utiliza su propia instancia para
+     * evitar corrupción de formato cuando se ejecutan varios
+     * reportes simultáneamente.
+     */
+    private static final ThreadLocal<DecimalFormat> DEFAULT_FORMAT = ThreadLocal.withInitial(
+            ReportKpiCalculationSupport::createDecimalFormat);
 
-    public Double calculate(List<ReportMetricPoint> points, ReportKpiAggregationType aggregation) {
-        if (points == null || points.isEmpty() || aggregation == null) {
-            return null;
-        }
+    private final ReportSeriesStatisticsService statisticsService;
 
-        List<Double> values = points.stream()
-                .map(ReportMetricPoint::getValue)
-                .filter(v -> v != null)
-                .collect(Collectors.toList());
+    public Double calculate(
+            List<ReportMetricPoint> points,
+            ReportKpiAggregationType aggregation) {
 
-        if (values.isEmpty()) {
-            return null;
-        }
+        ReportSeriesStatistics statistics = statisticsService.calculate(
+                points);
 
-        switch (aggregation) {
-            case AVG:
-                return values.stream().mapToDouble(Double::doubleValue).average().orElse(Double.NaN);
-            case MIN:
-                return values.stream().mapToDouble(Double::doubleValue).min().orElse(Double.NaN);
-            case MAX:
-                return values.stream().mapToDouble(Double::doubleValue).max().orElse(Double.NaN);
-            case SUM:
-                return values.stream().mapToDouble(Double::doubleValue).sum();
-            case COUNT:
-                return (double) values.size();
-            case FIRST:
-                return points.stream()
-                        .filter(p -> p.getValue() != null)
-                        .min(Comparator.comparing(ReportMetricPoint::getTs))
-                        .map(ReportMetricPoint::getValue)
-                        .orElse(null);
-            case LAST:
-                return points.stream()
-                        .filter(p -> p.getValue() != null)
-                        .max(Comparator.comparing(ReportMetricPoint::getTs))
-                        .map(ReportMetricPoint::getValue)
-                        .orElse(null);
-            case DELTA:
-                Double first = points.stream()
-                        .filter(p -> p.getValue() != null)
-                        .min(Comparator.comparing(ReportMetricPoint::getTs))
-                        .map(ReportMetricPoint::getValue)
-                        .orElse(null);
-
-                Double last = points.stream()
-                        .filter(p -> p.getValue() != null)
-                        .max(Comparator.comparing(ReportMetricPoint::getTs))
-                        .map(ReportMetricPoint::getValue)
-                        .orElse(null);
-
-                if (first == null || last == null) {
-                    return null;
-                }
-                return last - first;
-            default:
-                return null;
-        }
+        return statisticsService.resolveValue(
+                statistics,
+                aggregation);
     }
 
-    public String format(Double value) {
-        if (value == null) {
+    public String format(
+            Double value) {
+
+        if (value == null
+                || !Double.isFinite(value)) {
             return null;
         }
-        return DEFAULT_FORMAT.format(value);
+
+        return DEFAULT_FORMAT
+                .get()
+                .format(value);
+    }
+
+    private static DecimalFormat createDecimalFormat() {
+
+        DecimalFormatSymbols symbols = DecimalFormatSymbols.getInstance(
+                Locale.US);
+
+        DecimalFormat format = new DecimalFormat(
+                "#,##0.###",
+                symbols);
+
+        format.setRoundingMode(
+                RoundingMode.HALF_UP);
+
+        format.setGroupingUsed(true);
+
+        return format;
     }
 }

@@ -24,6 +24,7 @@ import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.common.data.report.ReportTimeSeries;
 import org.thingsboard.server.common.data.report.ReportVariableConfig;
 import org.thingsboard.server.common.data.report.ReportVariableMetadata;
+import org.thingsboard.server.common.data.report.ReportSeriesStatistics;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -73,6 +74,7 @@ public class DefaultReportTableService implements ReportTableService {
      * - reutilización de la caché de telemetría.
      */
     private final ReportVariableSeriesService reportVariableSeriesService;
+    private final ReportSeriesStatisticsService reportSeriesStatisticsService;
 
     @Override
     public List<ReportTable> buildTables(
@@ -393,7 +395,7 @@ public class DefaultReportTableService implements ReportTableService {
                     continue;
                 }
 
-                Stats stats = calculateStats(
+                ReportSeriesStatistics statistics = reportSeriesStatisticsService.calculate(
                         series.getPoints());
 
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -415,63 +417,63 @@ public class DefaultReportTableService implements ReportTableService {
                 if (isCountEnabled(variable)) {
                     row.put(
                             "count",
-                            stats.count);
+                            statistics.getValidPointCount());
                 }
 
                 if (isMinEnabled(variable)) {
                     row.put(
                             "min",
                             formatStatistic(
-                                    stats.hasData,
-                                    stats.min));
+                                    statistics.isHasData(),
+                                    statistics.getMin()));
                 }
 
                 if (isMaxEnabled(variable)) {
                     row.put(
                             "max",
                             formatStatistic(
-                                    stats.hasData,
-                                    stats.max));
+                                    statistics.isHasData(),
+                                    statistics.getMax()));
                 }
 
                 if (isAvgEnabled(variable)) {
                     row.put(
                             "avg",
                             formatStatistic(
-                                    stats.hasData,
-                                    stats.avg));
+                                    statistics.isHasData(),
+                                    statistics.getAvg()));
                 }
 
                 if (isSumEnabled(variable)) {
                     row.put(
                             "sum",
                             formatStatistic(
-                                    stats.hasData,
-                                    stats.sum));
+                                    statistics.isHasData(),
+                                    statistics.getSum()));
                 }
 
                 if (isFirstEnabled(variable)) {
                     row.put(
                             "first",
                             formatStatistic(
-                                    stats.hasData,
-                                    stats.first));
+                                    statistics.isHasData(),
+                                    statistics.getFirst()));
                 }
 
                 if (isLastEnabled(variable)) {
                     row.put(
-                            "last",
+                            "first",
                             formatStatistic(
-                                    stats.hasData,
-                                    stats.last));
+                                    statistics.isHasData(),
+                                    statistics.getFirst()));
                 }
 
                 if (isDeltaEnabled(variable)) {
                     row.put(
                             "delta",
                             formatStatistic(
-                                    stats.hasData,
-                                    stats.last - stats.first));
+                                    statistics.isHasData(),
+                                    statistics.getDelta()));
                 }
 
                 rows.add(row);
@@ -686,65 +688,20 @@ public class DefaultReportTableService implements ReportTableService {
         return telemetryQuery;
     }
 
-    /**
-     * Calcula las estadísticas sobre los puntos ya convertidos.
-     *
-     * La lista se considera cronológica porque las consultas del
-     * servicio central utilizan orderBy ASC.
-     */
-    private Stats calculateStats(
-            List<ReportMetricPoint> points) {
-
-        Stats stats = new Stats();
-
-        if (points == null
-                || points.isEmpty()) {
-            return stats;
-        }
-
-        for (ReportMetricPoint point : points) {
-            if (point == null
-                    || point.getValue() == null) {
-                continue;
-            }
-
-            double value = point.getValue();
-
-            if (!stats.hasData) {
-                stats.min = value;
-                stats.max = value;
-                stats.first = value;
-                stats.last = value;
-                stats.hasData = true;
-            }
-
-            stats.count++;
-            stats.sum += value;
-
-            stats.min = Math.min(
-                    stats.min,
-                    value);
-
-            stats.max = Math.max(
-                    stats.max,
-                    value);
-
-            stats.last = value;
-        }
-
-        if (stats.count > 0) {
-            stats.avg = stats.sum / stats.count;
-        }
-
-        return stats;
-    }
-
     private String formatStatistic(
             boolean hasData,
-            double value) {
+            Double value) {
 
-        return hasData
-                ? calculationSupport.format(value)
+        if (!hasData
+                || value == null
+                || !Double.isFinite(value)) {
+            return "-";
+        }
+
+        String formatted = calculationSupport.format(value);
+
+        return formatted != null
+                ? formatted
                 : "-";
     }
 
@@ -888,20 +845,5 @@ public class DefaultReportTableService implements ReportTableService {
 
         return value != null
                 && !value.isBlank();
-    }
-
-    private static final class Stats {
-
-        private boolean hasData;
-
-        private int count;
-
-        private double min;
-        private double max;
-        private double avg;
-        private double sum;
-
-        private double first;
-        private double last;
     }
 }

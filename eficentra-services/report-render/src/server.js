@@ -1530,48 +1530,227 @@ function renderSeriesMiniTable(doc, series, payload) {
     renderCompactTable(doc, columns, rows);
 }
 
-function renderCombinedChartsWithGranularity(doc, payload, series) {
-    const granularity = getCombinedChartGranularity(payload, series);
-    const timezone = getPayloadTimezone(payload);
+function renderCombinedChartsWithGranularity(
+    doc,
+    payload,
+    series
+) {
+    const combinedConfig =
+        getCombinedChartConfig(payload);
 
-    console.log('[report-render] combined granularity=', granularity, 'series=', series.length);
+    const granularity =
+        getCombinedChartGranularity(
+            payload,
+            series
+        );
 
-    if (granularity === 'FULL') {
-        renderCombinedChartsPage(doc, payload, series, null);
+    const timezone =
+        getPayloadTimezone(payload);
+
+    const chartUnits =
+        buildCombinedChartUnits(
+            series,
+            granularity,
+            timezone,
+            combinedConfig
+        );
+
+    console.log(
+        '[report-render] combined layout:',
+        'granularity=',
+        granularity,
+        'groupMode=',
+        combinedConfig.groupMode,
+        'units=',
+        chartUnits.length,
+        'series=',
+        series.length,
+        'dataInterval=',
+        combinedConfig.dataInterval
+    );
+
+    if (!chartUnits.length) {
         return;
     }
 
-    const groups = splitSeriesByGranularity(series, granularity, timezone);
-
-    console.log('[report-render] combined periods=', groups.length);
-
-    if (!groups.length) {
-        renderCombinedChartsPage(doc, payload, series, null);
-        return;
-    }
-
-    groups.forEach(group => {
-        renderCombinedChartsPage(doc, payload, group.series, group.label);
+    chartUnits.forEach(unit => {
+        renderCombinedChartsPage(
+            doc,
+            payload,
+            unit,
+            combinedConfig
+        );
     });
 
     normalizePdfState(doc);
 }
 
 function getCombinedChartConfig(payload) {
-    return findCombinedChartConfig(payload, 0) || {
-        granularity: 'FULL',
-        tableEnabled: true,
+    const rawConfig =
+        findCombinedChartConfig(payload, 0) || {};
+
+    const rawStats =
+        rawConfig.stats || {};
+
+    const tableMode =
+        normalizeCombinedOption(
+            rawConfig.tableMode,
+            ['FULL', 'COMPACT', 'NONE'],
+            rawConfig.tableEnabled === false
+                ? 'NONE'
+                : 'FULL'
+        );
+
+    return {
+        granularity: normalizeCombinedOption(
+            rawConfig.granularity,
+            ['FULL', 'DAY', 'WEEK', 'MONTH'],
+            'FULL'
+        ),
+
+        groupMode: normalizeCombinedOption(
+            rawConfig.groupMode,
+            ['ALL_SERIES', 'BY_ENTITY', 'BY_VARIABLE'],
+            'BY_ENTITY'
+        ),
+
+        titleMode: normalizeCombinedOption(
+            rawConfig.titleMode,
+            ['AUTO', 'ENTITY_NAME', 'VARIABLE_NAME', 'CUSTOM'],
+            'AUTO'
+        ),
+
+        customTitle:
+            String(
+                rawConfig.customTitle || ''
+            ).trim(),
+
+        sortMode: normalizeCombinedOption(
+            rawConfig.sortMode,
+            ['ENTITY_THEN_PERIOD', 'PERIOD_THEN_ENTITY'],
+            'ENTITY_THEN_PERIOD'
+        ),
+
+        dataInterval: normalizeCombinedOption(
+            rawConfig.dataInterval,
+            [
+                'AUTO',
+                'RAW',
+                'FIFTEEN_MINUTES',
+                'THIRTY_MINUTES',
+                'HOUR',
+                'CUSTOM'
+            ],
+            'AUTO'
+        ),
+
+        customIntervalMinutes: clampNumber(
+            rawConfig.customIntervalMinutes,
+            1,
+            10080,
+            60
+        ),
+
+        bucketAggregation: normalizeCombinedOption(
+            rawConfig.bucketAggregation,
+            ['AVG', 'MIN', 'MAX', 'SUM', 'FIRST', 'LAST'],
+            'AVG'
+        ),
+
+        pageDensity: normalizeCombinedOption(
+            rawConfig.pageDensity,
+            ['AUTO', 'DETAILED', 'COMPACT', 'DENSE'],
+            'DETAILED'
+        ),
+
+        tableMode,
+
+        legendMode: normalizeCombinedOption(
+            rawConfig.legendMode,
+            ['AUTO', 'PER_CHART', 'SHARED', 'NONE'],
+            'AUTO'
+        ),
+
+        seriesNameMode: normalizeCombinedOption(
+            rawConfig.seriesNameMode,
+            [
+                'AUTO',
+                'LABEL_ONLY',
+                'LABEL_AND_ENTITY',
+                'NUMBERED'
+            ],
+            'AUTO'
+        ),
+
+        /*
+         * Compatibilidad con la lógica anterior.
+         */
+        tableEnabled:
+            tableMode !== 'NONE',
+
         stats: {
-            min: true,
-            max: true,
-            avg: true,
-            count: true,
-            sum: false,
-            first: false,
-            last: false,
-            delta: false
+            min:
+                rawStats.min !== false,
+
+            max:
+                rawStats.max !== false,
+
+            avg:
+                rawStats.avg !== false,
+
+            count:
+                rawStats.count !== false,
+
+            sum:
+                rawStats.sum === true,
+
+            first:
+                rawStats.first === true,
+
+            last:
+                rawStats.last === true,
+
+            delta:
+                rawStats.delta === true
         }
     };
+}
+
+function normalizeCombinedOption(
+    value,
+    allowedValues,
+    fallback
+) {
+    const normalized =
+        String(value || '')
+            .trim()
+            .toUpperCase();
+
+    return allowedValues.includes(normalized)
+        ? normalized
+        : fallback;
+}
+
+function clampNumber(
+    value,
+    minimum,
+    maximum,
+    fallback
+) {
+    const numericValue =
+        Number(value);
+
+    if (!Number.isFinite(numericValue)) {
+        return fallback;
+    }
+
+    return Math.max(
+        minimum,
+        Math.min(
+            maximum,
+            numericValue
+        )
+    );
 }
 
 function findCombinedChartConfig(node, depth) {
@@ -1682,6 +1861,1044 @@ function splitSeriesByGranularity(series, granularity, timezone) {
         .sort((a, b) => String(a.key).localeCompare(String(b.key)));
 }
 
+function buildCombinedChartUnits(
+    series,
+    granularity,
+    timezone,
+    combinedConfig
+) {
+    const sourceSeries =
+        Array.isArray(series)
+            ? series.filter(Boolean)
+            : [];
+
+    if (!sourceSeries.length) {
+        return [];
+    }
+
+    const colorIndexes =
+        buildCombinedColorIndexes(
+            sourceSeries,
+            combinedConfig.groupMode
+        );
+
+    const groups =
+        groupCombinedSeries(
+            sourceSeries,
+            combinedConfig.groupMode
+        );
+
+    const units = [];
+
+    groups.forEach((group, groupIndex) => {
+        const coloredSeries =
+            group.series.map(item => ({
+                ...item,
+
+                __colorIndex:
+                    colorIndexes.get(
+                        getCombinedColorIdentity(
+                            item,
+                            combinedConfig.groupMode
+                        )
+                    ) || 0
+            }));
+
+        if (granularity === 'FULL') {
+            units.push({
+                groupKey:
+                    group.key,
+
+                groupLabel:
+                    group.label,
+
+                groupIndex,
+
+                periodKey:
+                    'FULL',
+
+                periodLabel:
+                    null,
+
+                periodIndex:
+                    0,
+
+                granularity,
+
+                series:
+                    coloredSeries
+            });
+
+            return;
+        }
+
+        const periods =
+            splitSeriesByGranularity(
+                coloredSeries,
+                granularity,
+                timezone
+            );
+
+        periods.forEach(
+            (period, periodIndex) => {
+                units.push({
+                    groupKey:
+                        group.key,
+
+                    groupLabel:
+                        group.label,
+
+                    groupIndex,
+
+                    periodKey:
+                        period.key,
+
+                    periodLabel:
+                        period.label,
+
+                    periodIndex,
+
+                    granularity,
+
+                    series:
+                        period.series
+                });
+            }
+        );
+    });
+
+    return sortCombinedChartUnits(
+        units,
+        combinedConfig.sortMode
+    );
+}
+
+function groupCombinedSeries(
+    series,
+    groupMode
+) {
+    const groups =
+        new Map();
+
+    (series || []).forEach(
+        (item, index) => {
+            const identity =
+                resolveCombinedGroupIdentity(
+                    item,
+                    groupMode
+                );
+
+            if (!groups.has(identity.key)) {
+                groups.set(
+                    identity.key,
+                    {
+                        key:
+                            identity.key,
+
+                        label:
+                            identity.label,
+
+                        order:
+                            index,
+
+                        series:
+                            []
+                    }
+                );
+            }
+
+            groups.get(identity.key)
+                .series
+                .push(item);
+        }
+    );
+
+    return Array.from(
+        groups.values()
+    );
+}
+
+function resolveCombinedGroupIdentity(
+    item,
+    groupMode
+) {
+    if (groupMode === 'BY_VARIABLE') {
+        return {
+            key:
+                `variable:${item?.key ||
+                item?.label ||
+                'unknown'
+                }`,
+
+            label:
+                item?.label ||
+                item?.key ||
+                'Variable'
+        };
+    }
+
+    if (groupMode === 'ALL_SERIES') {
+        return {
+            key:
+                'all-series',
+
+            label:
+                'Comparativa de equipos'
+        };
+    }
+
+    return {
+        key:
+            `entity:${item?.entityType || 'ENTITY'
+            }:${item?.entityId ||
+            item?.entityName ||
+            'unknown'
+            }`,
+
+        label:
+            item?.entityName ||
+            'Dispositivo'
+    };
+}
+
+function sortCombinedChartUnits(
+    units,
+    sortMode
+) {
+    return [...units].sort(
+        (left, right) => {
+            if (
+                sortMode ===
+                'PERIOD_THEN_ENTITY'
+            ) {
+                const periodComparison =
+                    String(left.periodKey)
+                        .localeCompare(
+                            String(right.periodKey)
+                        );
+
+                if (periodComparison !== 0) {
+                    return periodComparison;
+                }
+
+                return (
+                    left.groupIndex -
+                    right.groupIndex
+                );
+            }
+
+            if (
+                left.groupIndex !==
+                right.groupIndex
+            ) {
+                return (
+                    left.groupIndex -
+                    right.groupIndex
+                );
+            }
+
+            return String(left.periodKey)
+                .localeCompare(
+                    String(right.periodKey)
+                );
+        }
+    );
+}
+
+function buildCombinedColorIndexes(
+    series,
+    groupMode
+) {
+    const result =
+        new Map();
+
+    (series || []).forEach(item => {
+        const identity =
+            getCombinedColorIdentity(
+                item,
+                groupMode
+            );
+
+        if (!result.has(identity)) {
+            result.set(
+                identity,
+                result.size
+            );
+        }
+    });
+
+    return result;
+}
+
+function getCombinedColorIdentity(
+    item,
+    groupMode
+) {
+    /*
+     * Al agrupar por dispositivo, la misma variable
+     * conserva el mismo color en todos los equipos.
+     */
+    if (groupMode === 'BY_ENTITY') {
+        return `variable:${item?.key ||
+            item?.label ||
+            'unknown'
+            }`;
+    }
+
+    /*
+     * Al agrupar por variable, cada dispositivo
+     * conserva el mismo color.
+     */
+    if (groupMode === 'BY_VARIABLE') {
+        return `entity:${item?.entityId ||
+            item?.entityName ||
+            'unknown'
+            }`;
+    }
+
+    return `${item?.entityId ||
+        item?.entityName ||
+        'entity'
+        }:${item?.key ||
+        item?.label ||
+        'variable'
+        }`;
+}
+
+function resolveCombinedChartTitle(
+    unit,
+    combinedConfig
+) {
+    const series =
+        unit?.series || [];
+
+    const titleMode =
+        combinedConfig?.titleMode ||
+        'AUTO';
+
+    if (
+        titleMode === 'CUSTOM' &&
+        combinedConfig?.customTitle
+    ) {
+        return combinedConfig.customTitle;
+    }
+
+    const entityNames =
+        uniqueTextValues(
+            series.map(
+                item => item?.entityName
+            )
+        );
+
+    const variableNames =
+        uniqueTextValues(
+            series.map(
+                item =>
+                    item?.label ||
+                    item?.key
+            )
+        );
+
+    if (titleMode === 'ENTITY_NAME') {
+        return entityNames.length === 1
+            ? entityNames[0]
+            : 'Comparativa de equipos';
+    }
+
+    if (titleMode === 'VARIABLE_NAME') {
+        return variableNames.length === 1
+            ? variableNames[0]
+            : 'Comparativa de variables';
+    }
+
+    if (
+        combinedConfig?.groupMode ===
+        'BY_ENTITY'
+    ) {
+        return (
+            unit?.groupLabel ||
+            entityNames[0] ||
+            'Dispositivo'
+        );
+    }
+
+    if (
+        combinedConfig?.groupMode ===
+        'BY_VARIABLE'
+    ) {
+        return (
+            unit?.groupLabel ||
+            variableNames[0] ||
+            'Variable'
+        );
+    }
+
+    if (entityNames.length === 1) {
+        return entityNames[0];
+    }
+
+    if (variableNames.length === 1) {
+        return variableNames[0];
+    }
+
+    return 'Comparativa de equipos';
+}
+
+function resolveCombinedPeriodSubtitle(
+    unit
+) {
+    if (
+        !unit?.periodLabel ||
+        unit?.granularity === 'FULL'
+    ) {
+        return null;
+    }
+
+    const labels = {
+        DAY:
+            'Periodo diario',
+
+        WEEK:
+            'Periodo semanal',
+
+        MONTH:
+            'Periodo mensual'
+    };
+
+    return [
+        labels[unit.granularity] ||
+        'Periodo',
+
+        unit.periodLabel
+    ]
+        .filter(Boolean)
+        .join(' · ');
+}
+
+function buildCombinedSeriesDisplayEntries(
+    series,
+    combinedConfig
+) {
+    const sourceSeries =
+        Array.isArray(series)
+            ? series
+            : [];
+
+    const entityNames =
+        uniqueTextValues(
+            sourceSeries.map(
+                item => item?.entityName
+            )
+        );
+
+    const variableNames =
+        uniqueTextValues(
+            sourceSeries.map(
+                item =>
+                    item?.label ||
+                    item?.key
+            )
+        );
+
+    const allSameEntity =
+        entityNames.length <= 1;
+
+    const allSameVariable =
+        variableNames.length <= 1;
+
+    return sourceSeries.map(
+        (item, index) => {
+            const variableLabel =
+                item?.label ||
+                item?.key ||
+                `Serie ${index + 1}`;
+
+            const entityLabel =
+                item?.entityName ||
+                'Dispositivo';
+
+            let contextualName;
+
+            if (allSameEntity) {
+                contextualName =
+                    variableLabel;
+            } else if (allSameVariable) {
+                contextualName =
+                    entityLabel;
+            } else {
+                contextualName =
+                    `${variableLabel} · ${entityLabel}`;
+            }
+
+            const nameMode =
+                combinedConfig
+                    ?.seriesNameMode ||
+                'AUTO';
+
+            let displayName;
+
+            if (
+                nameMode ===
+                'LABEL_ONLY'
+            ) {
+                displayName =
+                    variableLabel;
+            } else if (
+                nameMode ===
+                'LABEL_AND_ENTITY'
+            ) {
+                displayName =
+                    `${variableLabel} · ${entityLabel}`;
+            } else if (
+                nameMode ===
+                'NUMBERED'
+            ) {
+                displayName =
+                    `S${index + 1} · ${contextualName}`;
+            } else {
+                displayName =
+                    contextualName;
+            }
+
+            return {
+                item,
+
+                index,
+
+                shortId:
+                    `S${index + 1}`,
+
+                displayName
+            };
+        }
+    );
+}
+
+function uniqueTextValues(values) {
+    return Array.from(
+        new Set(
+            (values || [])
+                .map(value =>
+                    String(
+                        value || ''
+                    ).trim()
+                )
+                .filter(Boolean)
+        )
+    );
+}
+
+function prepareCombinedSeriesForDrawing(
+    series,
+    combinedConfig
+) {
+    const intervalMs =
+        resolveCombinedDrawingInterval(
+            series,
+            combinedConfig
+        );
+
+    const aggregation =
+        combinedConfig
+            ?.bucketAggregation ||
+        'AVG';
+
+    return (series || []).map(item => {
+        const points =
+            normalizeChartPoints(
+                item?.points
+            );
+
+        const reducedPoints =
+            intervalMs > 0
+                ? bucketCombinedChartPoints(
+                    points,
+                    intervalMs,
+                    aggregation
+                )
+                : points;
+
+        return {
+            ...item,
+
+            points:
+                downsampleCombinedChartPoints(
+                    reducedPoints,
+                    1200
+                )
+        };
+    });
+}
+
+function resolveCombinedDrawingInterval(
+    series,
+    combinedConfig
+) {
+    const dataInterval =
+        combinedConfig
+            ?.dataInterval ||
+        'AUTO';
+
+    if (dataInterval === 'RAW') {
+        return 0;
+    }
+
+    if (
+        dataInterval ===
+        'FIFTEEN_MINUTES'
+    ) {
+        return 15 * 60 * 1000;
+    }
+
+    if (
+        dataInterval ===
+        'THIRTY_MINUTES'
+    ) {
+        return 30 * 60 * 1000;
+    }
+
+    if (dataInterval === 'HOUR') {
+        return 60 * 60 * 1000;
+    }
+
+    if (dataInterval === 'CUSTOM') {
+        return (
+            clampNumber(
+                combinedConfig
+                    ?.customIntervalMinutes,
+                1,
+                10080,
+                60
+            ) *
+            60 *
+            1000
+        );
+    }
+
+    const normalizedSeries =
+        (series || [])
+            .map(item =>
+                normalizeChartPoints(
+                    item?.points
+                )
+            )
+            .filter(points =>
+                points.length
+            );
+
+    if (!normalizedSeries.length) {
+        return 0;
+    }
+
+    const largestPointCount =
+        Math.max(
+            ...normalizedSeries.map(
+                points => points.length
+            )
+        );
+
+    if (largestPointCount <= 700) {
+        return 0;
+    }
+
+    const allFirstTimestamps =
+        normalizedSeries.map(
+            points => points[0].ts
+        );
+
+    const allLastTimestamps =
+        normalizedSeries.map(
+            points =>
+                points[
+                    points.length - 1
+                ].ts
+        );
+
+    const minimumTimestamp =
+        Math.min(
+            ...allFirstTimestamps
+        );
+
+    const maximumTimestamp =
+        Math.max(
+            ...allLastTimestamps
+        );
+
+    const duration =
+        Math.max(
+            1,
+            maximumTimestamp -
+            minimumTimestamp
+        );
+
+    const desiredInterval =
+        duration / 600;
+
+    const friendlyIntervals = [
+        60 * 1000,
+        5 * 60 * 1000,
+        15 * 60 * 1000,
+        30 * 60 * 1000,
+        60 * 60 * 1000,
+        2 * 60 * 60 * 1000,
+        4 * 60 * 60 * 1000,
+        6 * 60 * 60 * 1000,
+        12 * 60 * 60 * 1000,
+        24 * 60 * 60 * 1000
+    ];
+
+    return (
+        friendlyIntervals.find(
+            interval =>
+                interval >=
+                desiredInterval
+        ) ||
+        friendlyIntervals[
+        friendlyIntervals.length - 1
+        ]
+    );
+}
+
+function normalizeChartPoints(points) {
+    return (points || [])
+        .filter(point =>
+            point &&
+            Number.isFinite(
+                Number(point.ts)
+            ) &&
+            Number.isFinite(
+                Number(point.value)
+            )
+        )
+        .map(point => ({
+            ts:
+                Number(point.ts),
+
+            value:
+                Number(point.value)
+        }))
+        .sort(
+            (left, right) =>
+                left.ts - right.ts
+        );
+}
+
+function bucketCombinedChartPoints(
+    points,
+    intervalMs,
+    aggregation
+) {
+    if (
+        !Array.isArray(points) ||
+        !points.length ||
+        !Number.isFinite(intervalMs) ||
+        intervalMs <= 0
+    ) {
+        return points || [];
+    }
+
+    const buckets =
+        new Map();
+
+    points.forEach(point => {
+        const bucketStart =
+            Math.floor(
+                point.ts /
+                intervalMs
+            ) *
+            intervalMs;
+
+        if (!buckets.has(bucketStart)) {
+            buckets.set(
+                bucketStart,
+                {
+                    bucketStart,
+
+                    first:
+                        point,
+
+                    last:
+                        point,
+
+                    min:
+                        point,
+
+                    max:
+                        point,
+
+                    sum:
+                        0,
+
+                    count:
+                        0
+                }
+            );
+        }
+
+        const bucket =
+            buckets.get(bucketStart);
+
+        bucket.last =
+            point;
+
+        if (
+            point.value <
+            bucket.min.value
+        ) {
+            bucket.min =
+                point;
+        }
+
+        if (
+            point.value >
+            bucket.max.value
+        ) {
+            bucket.max =
+                point;
+        }
+
+        bucket.sum +=
+            point.value;
+
+        bucket.count++;
+    });
+
+    return Array.from(
+        buckets.values()
+    )
+        .sort(
+            (left, right) =>
+                left.bucketStart -
+                right.bucketStart
+        )
+        .map(bucket =>
+            aggregateCombinedChartBucket(
+                bucket,
+                intervalMs,
+                aggregation
+            )
+        );
+}
+
+function aggregateCombinedChartBucket(
+    bucket,
+    intervalMs,
+    aggregation
+) {
+    if (aggregation === 'MIN') {
+        return {
+            ts:
+                bucket.min.ts,
+
+            value:
+                bucket.min.value
+        };
+    }
+
+    if (aggregation === 'MAX') {
+        return {
+            ts:
+                bucket.max.ts,
+
+            value:
+                bucket.max.value
+        };
+    }
+
+    if (aggregation === 'FIRST') {
+        return {
+            ts:
+                bucket.first.ts,
+
+            value:
+                bucket.first.value
+        };
+    }
+
+    if (aggregation === 'LAST') {
+        return {
+            ts:
+                bucket.last.ts,
+
+            value:
+                bucket.last.value
+        };
+    }
+
+    const timestamp =
+        bucket.bucketStart +
+        intervalMs / 2;
+
+    if (aggregation === 'SUM') {
+        return {
+            ts:
+                timestamp,
+
+            value:
+                bucket.sum
+        };
+    }
+
+    return {
+        ts:
+            timestamp,
+
+        value:
+            bucket.count > 0
+                ? bucket.sum /
+                bucket.count
+                : 0
+    };
+}
+
+function downsampleCombinedChartPoints(
+    points,
+    maximumPoints
+) {
+    const source =
+        Array.isArray(points)
+            ? points
+            : [];
+
+    if (
+        source.length <=
+        maximumPoints
+    ) {
+        return source;
+    }
+
+    const result = [
+        source[0]
+    ];
+
+    const interior =
+        source.slice(
+            1,
+            source.length - 1
+        );
+
+    const bucketCount =
+        Math.max(
+            1,
+            Math.floor(
+                (maximumPoints - 2) / 2
+            )
+        );
+
+    const bucketSize =
+        interior.length /
+        bucketCount;
+
+    for (
+        let bucketIndex = 0;
+        bucketIndex < bucketCount;
+        bucketIndex++
+    ) {
+        const startIndex =
+            Math.floor(
+                bucketIndex *
+                bucketSize
+            );
+
+        const endIndex =
+            Math.min(
+                interior.length,
+                Math.floor(
+                    (bucketIndex + 1) *
+                    bucketSize
+                )
+            );
+
+        const bucket =
+            interior.slice(
+                startIndex,
+                Math.max(
+                    startIndex + 1,
+                    endIndex
+                )
+            );
+
+        if (!bucket.length) {
+            continue;
+        }
+
+        let minimumPoint =
+            bucket[0];
+
+        let maximumPoint =
+            bucket[0];
+
+        bucket.forEach(point => {
+            if (
+                point.value <
+                minimumPoint.value
+            ) {
+                minimumPoint =
+                    point;
+            }
+
+            if (
+                point.value >
+                maximumPoint.value
+            ) {
+                maximumPoint =
+                    point;
+            }
+        });
+
+        if (
+            minimumPoint.ts <=
+            maximumPoint.ts
+        ) {
+            result.push(
+                minimumPoint
+            );
+
+            if (
+                maximumPoint !==
+                minimumPoint
+            ) {
+                result.push(
+                    maximumPoint
+                );
+            }
+        } else {
+            result.push(
+                maximumPoint
+            );
+
+            if (
+                maximumPoint !==
+                minimumPoint
+            ) {
+                result.push(
+                    minimumPoint
+                );
+            }
+        }
+    }
+
+    result.push(
+        source[
+        source.length - 1
+        ]
+    );
+
+    return result
+        .filter(
+            (point, index, values) =>
+                index === 0 ||
+                point.ts !==
+                values[index - 1].ts ||
+                point.value !==
+                values[index - 1].value
+        )
+        .sort(
+            (left, right) =>
+                left.ts - right.ts
+        );
+}
+
 function calculateStats(points) {
     const valid = (points || [])
         .filter(p => p && Number.isFinite(Number(p.value)))
@@ -1771,77 +2988,213 @@ function findChartLayout(node, depth) {
 
     return null;
 }
-
-function renderCombinedChartsPage(doc, payload, series, periodLabel) {
-    const validSeries = (series || []).filter(item =>
-        (item.points || []).some(point =>
-            point && Number.isFinite(Number(point.value)) && Number.isFinite(Number(point.ts))
-        )
-    );
+function renderCombinedChartsPage(
+    doc,
+    payload,
+    unit,
+    combinedConfig
+) {
+    const validSeries =
+        (unit?.series || [])
+            .filter(item =>
+                (item.points || [])
+                    .some(point =>
+                        point &&
+                        Number.isFinite(
+                            Number(point.value)
+                        ) &&
+                        Number.isFinite(
+                            Number(point.ts)
+                        )
+                    )
+            );
 
     if (!validSeries.length) {
         return;
     }
 
-    ensureSpace(doc, 390);
+    ensureSpace(
+        doc,
+        combinedConfig.tableMode === 'NONE'
+            ? 285
+            : 390
+    );
 
-    doc.fontSize(12)
+    const title =
+        resolveCombinedChartTitle(
+            unit,
+            combinedConfig
+        );
+
+    const periodSubtitle =
+        resolveCombinedPeriodSubtitle(
+            unit
+        );
+
+    doc.font('Helvetica-Bold')
+        .fontSize(12)
         .fillColor('#111111')
-        .text(periodLabel ? `Gráfica combinada | ${periodLabel}` : 'Gráfica combinada', doc.page.margins.left, doc.y, {
-            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-            lineBreak: false
-        });
+        .text(
+            title,
+            doc.page.margins.left,
+            doc.y,
+            {
+                width:
+                    doc.page.width -
+                    doc.page.margins.left -
+                    doc.page.margins.right,
 
-    doc.moveDown(0.6);
+                height:
+                    30,
 
-    doc.fontSize(8)
-        .fillColor('#666666')
-        .text('Las series se muestran normalizadas para comparar comportamiento relativo entre variables con distintas unidades.', doc.page.margins.left, doc.y, {
-            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-            lineGap: 2
-        });
+                ellipsis:
+                    true
+            }
+        );
 
-    doc.moveDown(0.8);
+    doc.font('Helvetica');
+
+    if (periodSubtitle) {
+        doc.moveDown(0.2);
+
+        doc.fontSize(8)
+            .fillColor('#5F6B76')
+            .text(
+                periodSubtitle,
+                doc.page.margins.left,
+                doc.y,
+                {
+                    width:
+                        doc.page.width -
+                        doc.page.margins.left -
+                        doc.page.margins.right
+                }
+            );
+    }
+
+    doc.moveDown(0.55);
+
+    if (validSeries.length > 1) {
+        doc.fontSize(8)
+            .fillColor('#666666')
+            .text(
+                'Las series se normalizan para comparar su comportamiento relativo aun cuando utilizan unidades diferentes.',
+                doc.page.margins.left,
+                doc.y,
+                {
+                    width:
+                        doc.page.width -
+                        doc.page.margins.left -
+                        doc.page.margins.right,
+
+                    lineGap:
+                        2
+                }
+            );
+
+        doc.moveDown(0.7);
+    }
 
     const chartBox = {
-        x: doc.page.margins.left,
-        y: doc.y,
-        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-        height: 190
+        x:
+            doc.page.margins.left,
+
+        y:
+            doc.y,
+
+        width:
+            doc.page.width -
+            doc.page.margins.left -
+            doc.page.margins.right,
+
+        height:
+            190
     };
+
+    const drawingSeries =
+        prepareCombinedSeriesForDrawing(
+            validSeries,
+            combinedConfig
+        );
 
     drawNormalizedCombinedLineChart(
         doc,
-        validSeries,
+        drawingSeries,
         chartBox,
         getPayloadTimezone(payload)
     );
 
-    doc.y = chartBox.y + chartBox.height + 20;
+    doc.y =
+        chartBox.y +
+        chartBox.height +
+        20;
+
     resetCursor(doc);
 
-    renderCombinedLegend(doc, validSeries);
-    normalizePdfState(doc);
+    const effectiveLegendMode =
+        resolveEffectiveLegendMode(
+            combinedConfig,
+            validSeries
+        );
 
-    doc.moveDown(0.8);
-    normalizePdfState(doc);
+    if (
+        effectiveLegendMode !==
+        'NONE'
+    ) {
+        renderCombinedLegend(
+            doc,
+            validSeries,
+            combinedConfig
+        );
 
-    const combinedConfig = getCombinedChartConfig(payload);
+        normalizePdfState(doc);
 
-    if (combinedConfig?.tableEnabled !== false) {
+        doc.moveDown(0.6);
+    }
+
+    if (
+        combinedConfig.tableMode !==
+        'NONE'
+    ) {
         renderCombinedSeriesStatsTable(
             doc,
             validSeries,
             combinedConfig
         );
+
         normalizePdfState(doc);
     }
 
     doc.moveDown(1);
     normalizePdfState(doc);
+}
 
-    resetCursor(doc);
-    doc.moveDown(1);
+function resolveEffectiveLegendMode(
+    combinedConfig,
+    series
+) {
+    const configuredMode =
+        combinedConfig?.legendMode ||
+        'AUTO';
+
+    if (configuredMode === 'NONE') {
+        return 'NONE';
+    }
+
+    if (
+        configuredMode ===
+        'AUTO'
+    ) {
+        return (series || []).length > 1
+            ? 'PER_CHART'
+            : 'NONE';
+    }
+
+    /*
+     * SHARED se tratará como leyenda por gráfica
+     * hasta implementar varias gráficas por página.
+     */
+    return 'PER_CHART';
 }
 
 function drawNormalizedCombinedLineChart(
@@ -1921,7 +3274,19 @@ function drawNormalizedCombinedLineChart(
             doc.lineTo(chartPoints[i].x, chartPoints[i].y);
         }
 
-        doc.strokeColor(colors[index % colors.length])
+        const colorIndex =
+            Number.isInteger(
+                entry.item?.__colorIndex
+            )
+                ? entry.item.__colorIndex
+                : index;
+
+        doc.strokeColor(
+            colors[
+            colorIndex %
+            colors.length
+            ]
+        )
             .lineWidth(1.4)
             .stroke();
     });
@@ -1930,86 +3295,342 @@ function drawNormalizedCombinedLineChart(
         .lineWidth(1);
 }
 
-function renderCombinedLegend(doc, series) {
-    const colors = getChartColors(doc);
+function renderCombinedLegend(
+    doc,
+    series,
+    combinedConfig = {}
+) {
+    const colors =
+        getChartColors(doc);
 
-    const startX = doc.page.margins.left;
-    let x = startX;
-    let y = doc.y;
-    const maxX = doc.page.width - doc.page.margins.right;
+    const entries =
+        buildCombinedSeriesDisplayEntries(
+            series,
+            combinedConfig
+        );
 
-    series.forEach((item, index) => {
-        const label = safeText(`${item.label || item.key} - ${item.entityName || ''}`, 42);
-        const itemWidth = 170;
+    const startX =
+        doc.page.margins.left;
 
-        if (x + itemWidth > maxX) {
-            x = startX;
-            y += 18;
+    const maximumX =
+        doc.page.width -
+        doc.page.margins.right;
+
+    let x =
+        startX;
+
+    let y =
+        doc.y;
+
+    doc.font('Helvetica')
+        .fontSize(7);
+
+    entries.forEach(entry => {
+        const label =
+            safeText(
+                entry.displayName,
+                72
+            );
+
+        const measuredWidth =
+            doc.widthOfString(label);
+
+        const itemWidth =
+            Math.max(
+                105,
+                Math.min(
+                    235,
+                    measuredWidth + 28
+                )
+            );
+
+        if (
+            x + itemWidth >
+            maximumX
+        ) {
+            x =
+                startX;
+
+            y +=
+                18;
         }
 
-        doc.rect(x, y + 3, 8, 8).fill(colors[index % colors.length]);
+        const colorIndex =
+            Number.isInteger(
+                entry.item?.__colorIndex
+            )
+                ? entry.item.__colorIndex
+                : entry.index;
+
+        doc.rect(
+            x,
+            y + 3,
+            8,
+            8
+        )
+            .fill(
+                colors[
+                colorIndex %
+                colors.length
+                ]
+            );
 
         doc.fillColor('#333333')
             .fontSize(7)
-            .text(label, x + 12, y, {
-                width: itemWidth - 14,
-                lineBreak: false
-            });
+            .text(
+                label,
+                x + 12,
+                y,
+                {
+                    width:
+                        itemWidth - 14,
 
-        x += itemWidth;
+                    height:
+                        14,
+
+                    ellipsis:
+                        true,
+
+                    lineBreak:
+                        false
+                }
+            );
+
+        x +=
+            itemWidth;
     });
 
-    doc.y = y + 22;
+    doc.y =
+        y + 22;
+
     resetCursor(doc);
 }
 
-function renderCombinedSeriesStatsTable(doc, series, combinedConfig = {}) {
-    const configuredStats = combinedConfig?.stats || {};
+function renderCombinedSeriesStatsTable(
+    doc,
+    series,
+    combinedConfig = {}
+) {
+    const configuredStats =
+        combinedConfig?.stats || {};
+
     const statsConfig = {
-        count: configuredStats.count !== false,
-        min: configuredStats.min !== false,
-        max: configuredStats.max !== false,
-        avg: configuredStats.avg !== false,
-        sum: configuredStats.sum === true,
-        first: configuredStats.first === true,
-        last: configuredStats.last === true,
-        delta: configuredStats.delta === true
+        count:
+            configuredStats.count !== false,
+
+        min:
+            configuredStats.min !== false,
+
+        max:
+            configuredStats.max !== false,
+
+        avg:
+            configuredStats.avg !== false,
+
+        sum:
+            configuredStats.sum === true,
+
+        first:
+            configuredStats.first === true,
+
+        last:
+            configuredStats.last === true,
+
+        delta:
+            configuredStats.delta === true
     };
 
     const columns = [
-        { key: 'series', label: 'Serie', align: 'left' },
-        { key: 'unit', label: 'Unidad', align: 'left' }
+        {
+            key:
+                'series',
+
+            label:
+                'Serie',
+
+            align:
+                'left'
+        },
+
+        {
+            key:
+                'unit',
+
+            label:
+                'Unidad',
+
+            align:
+                'left'
+        }
     ];
 
-    if (statsConfig.count) columns.push({ key: 'samples', label: 'Muestras', align: 'right' });
-    if (statsConfig.min) columns.push({ key: 'min', label: 'Mínimo', align: 'right' });
-    if (statsConfig.max) columns.push({ key: 'max', label: 'Máximo', align: 'right' });
-    if (statsConfig.avg) columns.push({ key: 'avg', label: 'Promedio', align: 'right' });
-    if (statsConfig.sum) columns.push({ key: 'sum', label: 'Suma', align: 'right' });
-    if (statsConfig.first) columns.push({ key: 'first', label: 'Primero', align: 'right' });
-    if (statsConfig.last) columns.push({ key: 'last', label: 'Último', align: 'right' });
-    if (statsConfig.delta) columns.push({ key: 'delta', label: 'Diferencia', align: 'right' });
+    if (statsConfig.count) {
+        columns.push({
+            key:
+                'samples',
+
+            label:
+                'Muestras',
+
+            align:
+                'right'
+        });
+    }
+
+    if (statsConfig.min) {
+        columns.push({
+            key:
+                'min',
+
+            label:
+                'Mínimo',
+
+            align:
+                'right'
+        });
+    }
+
+    if (statsConfig.max) {
+        columns.push({
+            key:
+                'max',
+
+            label:
+                'Máximo',
+
+            align:
+                'right'
+        });
+    }
+
+    if (statsConfig.avg) {
+        columns.push({
+            key:
+                'avg',
+
+            label:
+                'Promedio',
+
+            align:
+                'right'
+        });
+    }
+
+    if (statsConfig.sum) {
+        columns.push({
+            key:
+                'sum',
+
+            label:
+                'Suma',
+
+            align:
+                'right'
+        });
+    }
+
+    if (statsConfig.first) {
+        columns.push({
+            key:
+                'first',
+
+            label:
+                'Primero',
+
+            align:
+                'right'
+        });
+    }
+
+    if (statsConfig.last) {
+        columns.push({
+            key:
+                'last',
+
+            label:
+                'Último',
+
+            align:
+                'right'
+        });
+    }
+
+    if (statsConfig.delta) {
+        columns.push({
+            key:
+                'delta',
+
+            label:
+                'Diferencia',
+
+            align:
+                'right'
+        });
+    }
+
+    const displayEntries =
+        buildCombinedSeriesDisplayEntries(
+            series,
+            combinedConfig
+        );
 
     const rows = [];
 
-    series.forEach((item, index) => {
-        const stats = calculateExtendedStats(item.points || []);
+    displayEntries.forEach(entry => {
+        const stats =
+            calculateExtendedStats(
+                entry.item?.points || []
+            );
 
         if (!stats) {
             return;
         }
 
         rows.push({
-            series: `${index + 1}. ${safeText(item.label || item.key, 28)}`,
-            unit: item.unit || '-',
-            samples: stats.count,
-            min: formatNumber(stats.min),
-            max: formatNumber(stats.max),
-            avg: formatNumber(stats.avg),
-            sum: formatNumber(stats.sum),
-            first: formatNumber(stats.first),
-            last: formatNumber(stats.last),
-            delta: formatNumber(stats.delta)
+            series:
+                entry.displayName,
+
+            unit:
+                entry.item?.unit ||
+                '-',
+
+            samples:
+                stats.count,
+
+            min:
+                formatNumber(
+                    stats.min
+                ),
+
+            max:
+                formatNumber(
+                    stats.max
+                ),
+
+            avg:
+                formatNumber(
+                    stats.avg
+                ),
+
+            sum:
+                formatNumber(
+                    stats.sum
+                ),
+
+            first:
+                formatNumber(
+                    stats.first
+                ),
+
+            last:
+                formatNumber(
+                    stats.last
+                ),
+
+            delta:
+                formatNumber(
+                    stats.delta
+                )
         });
     });
 
@@ -2017,7 +3638,259 @@ function renderCombinedSeriesStatsTable(doc, series, combinedConfig = {}) {
         return;
     }
 
-    renderCompactTable(doc, columns, rows);
+    renderFlexibleCombinedStatsTable(
+        doc,
+        columns,
+        rows
+    );
+}
+
+function renderFlexibleCombinedStatsTable(
+    doc,
+    columns,
+    rows
+) {
+    const startX =
+        doc.page.margins.left;
+
+    const tableWidth =
+        doc.page.width -
+        doc.page.margins.left -
+        doc.page.margins.right;
+
+    const headerHeight =
+        18;
+
+    const columnWeights =
+        columns.map(column => {
+            if (column.key === 'series') {
+                return 2.45;
+            }
+
+            if (column.key === 'unit') {
+                return 0.72;
+            }
+
+            if (column.key === 'samples') {
+                return 0.82;
+            }
+
+            if (column.key === 'sum') {
+                return 1.12;
+            }
+
+            return 0.9;
+        });
+
+    const totalWeight =
+        columnWeights.reduce(
+            (sum, weight) =>
+                sum + weight,
+            0
+        );
+
+    const columnWidths =
+        columnWeights.map(
+            weight =>
+                tableWidth *
+                weight /
+                totalWeight
+        );
+
+    const fontSize =
+        columns.length >= 9
+            ? 5.8
+            : 6.4;
+
+    const drawHeader =
+        y => {
+            doc.rect(
+                startX,
+                y,
+                tableWidth,
+                headerHeight
+            )
+                .fill('#EAF1F8');
+
+            let x =
+                startX;
+
+            columns.forEach(
+                (column, index) => {
+                    doc.fillColor('#0B2239')
+                        .font('Helvetica-Bold')
+                        .fontSize(fontSize)
+                        .text(
+                            column.label,
+                            x + 3,
+                            y + 6,
+                            {
+                                width:
+                                    columnWidths[index] -
+                                    6,
+
+                                align:
+                                    column.align ||
+                                    'left',
+
+                                lineBreak:
+                                    false,
+
+                                ellipsis:
+                                    true
+                            }
+                        );
+
+                    x +=
+                        columnWidths[index];
+                }
+            );
+
+            doc.font('Helvetica');
+
+            return (
+                y +
+                headerHeight
+            );
+        };
+
+    ensureSpace(
+        doc,
+        headerHeight + 42
+    );
+
+    let y =
+        drawHeader(doc.y);
+
+    rows.forEach((row, rowIndex) => {
+        const seriesColumnIndex =
+            columns.findIndex(
+                column =>
+                    column.key ===
+                    'series'
+            );
+
+        const seriesWidth =
+            seriesColumnIndex >= 0
+                ? columnWidths[
+                seriesColumnIndex
+                ]
+                : 100;
+
+        const seriesText =
+            String(
+                row.series || '-'
+            );
+
+        const measuredHeight =
+            doc.font('Helvetica')
+                .fontSize(fontSize)
+                .heightOfString(
+                    seriesText,
+                    {
+                        width:
+                            seriesWidth -
+                            8,
+
+                        lineGap:
+                            0
+                    }
+                );
+
+        const rowHeight =
+            Math.max(
+                18,
+                Math.min(
+                    32,
+                    measuredHeight + 8
+                )
+            );
+
+        if (
+            y + rowHeight >
+            doc.page.height -
+            doc.page.margins.bottom
+        ) {
+            doc.addPage();
+
+            y =
+                drawHeader(
+                    doc.y
+                );
+        }
+
+        doc.rect(
+            startX,
+            y,
+            tableWidth,
+            rowHeight
+        )
+            .fill(
+                rowIndex % 2 === 0
+                    ? '#FFFFFF'
+                    : '#F7FAFC'
+            );
+
+        let x =
+            startX;
+
+        columns.forEach(
+            (column, columnIndex) => {
+                const rawValue =
+                    row[column.key] !==
+                        undefined &&
+                        row[column.key] !==
+                        null
+                        ? row[column.key]
+                        : '-';
+
+                const isSeriesColumn =
+                    column.key ===
+                    'series';
+
+                doc.fillColor('#222222')
+                    .font('Helvetica')
+                    .fontSize(fontSize)
+                    .text(
+                        String(rawValue),
+                        x + 3,
+                        y + 5,
+                        {
+                            width:
+                                columnWidths[
+                                columnIndex
+                                ] - 6,
+
+                            height:
+                                rowHeight - 8,
+
+                            align:
+                                column.align ||
+                                'left',
+
+                            lineBreak:
+                                isSeriesColumn,
+
+                            ellipsis:
+                                true
+                        }
+                    );
+
+                x +=
+                    columnWidths[
+                    columnIndex
+                    ];
+            }
+        );
+
+        y +=
+            rowHeight;
+    });
+
+    doc.y =
+        y + 10;
+
+    resetCursor(doc);
 }
 
 function calculateExtendedStats(points) {

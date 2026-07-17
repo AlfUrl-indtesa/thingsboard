@@ -1,169 +1,604 @@
+const cluster = require('cluster');
 const express = require('express');
 const PDFDocument = require('pdfkit');
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 
+const renderWorkerCount = readIntegerEnvironment(
+    'RENDER_WORKERS',
+    2,
+    1,
+    8
+);
+
+const renderConcurrency = readIntegerEnvironment(
+    'RENDER_CONCURRENCY',
+    1,
+    1,
+    4
+);
+
+const renderMaxQueue = readIntegerEnvironment(
+    'RENDER_MAX_QUEUE',
+    20,
+    0,
+    1000
+);
+
+const renderQueueTimeoutMs = readIntegerEnvironment(
+    'RENDER_QUEUE_TIMEOUT_MS',
+    300000,
+    1000,
+    3600000
+);
+
+const renderMaxPayloadMb = readIntegerEnvironment(
+    'RENDER_MAX_PAYLOAD_MB',
+    50,
+    1,
+    200
+);
+
 const app = express();
-app.use(express.json({ limit: '50mb' }));
+const renderQueue = [];
+
+let activeRenders = 0;
+let completedRenders = 0;
+let failedRenders = 0;
+let rejectedRenders = 0;
+let totalQueueWaitMs = 0;
+let queuedRenderStarts = 0;
+
+const rendererStartedAt = Date.now();
+
+app.use(
+    express.json({
+        limit: `${renderMaxPayloadMb}mb`
+    })
+);
 
 app.get('/health', (req, res) => {
+    const memory = process.memoryUsage();
+
     res.json({
         status: 'UP',
-        service: 'eficentra-report-render'
+        service: 'eficentra-report-render',
+        pid: process.pid,
+        workerId: cluster.worker?.id || 0,
+        configuredWorkers: renderWorkerCount,
+        activeRenders,
+        queuedRenders: renderQueue.length,
+        concurrencyPerWorker: renderConcurrency,
+        maxQueuePerWorker: renderMaxQueue,
+        queueTimeoutMs: renderQueueTimeoutMs,
+        maxPayloadMb: renderMaxPayloadMb,
+        completedRenders,
+        failedRenders,
+        rejectedRenders,
+        averageQueueWaitMs:
+            queuedRenderStarts > 0
+                ? Math.round(
+                    totalQueueWaitMs /
+                    queuedRenderStarts
+                )
+                : 0,
+        uptimeSeconds:
+            Math.floor(
+                (Date.now() - rendererStartedAt) /
+                1000
+            ),
+        memory: {
+            rssMb: bytesToMegabytes(memory.rss),
+            heapUsedMb: bytesToMegabytes(
+                memory.heapUsed
+            ),
+            externalMb: bytesToMegabytes(
+                memory.external
+            )
+        }
     });
 });
 
-app.post('/render-report', async (req, res) => {
-    try {
-        const payload = req.body || {};
+app.post(
+    '/render-report',
+    renderQueueMiddleware,
+    async (req, res) => {
+        try {
+            const payload = req.body || {};
 
-        payload._logoBuffer = await loadLogoBuffer(
-            payload?.branding?.logoUrl
-        );
-
-        const branding = getBranding(payload);
-
-        const doc = new PDFDocument({
-            size: 'A4',
-            margin: 42,
-            bufferPages: true,
-            info: {
-                Title:
-                    branding.coverTitle ||
-                    payload?.meta?.templateName ||
-                    'Reporte Eficentra',
-
-                Author:
-                    branding.companyName ||
-                    'Eficentra'
-            }
-        });
-
-        doc._eficentraTheme = buildReportTheme(payload);
-
-        const chunks = [];
-
-        doc.on('data', chunk => chunks.push(chunk));
-        doc.on('end', () => {
-            const pdf = Buffer.concat(chunks);
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', 'inline; filename="report.pdf"');
-            res.setHeader('Content-Length', pdf.length);
-            res.status(200).send(pdf);
-        });
-
-        renderCover(doc, payload);
-        normalizePdfState(doc);
-
-        const tocEntries = [];
-        const tocPageIndex =
-            reserveTableOfContents(doc);
-
-        recordTocEntry(
-            doc,
-            tocEntries,
-            'Resumen ejecutivo'
-        );
-        renderExecutiveSummary(doc, payload);
-        normalizePdfState(doc);
-
-        recordTocEntry(
-            doc,
-            tocEntries,
-            'Calidad de datos'
-        );
-        renderDataQuality(doc, payload);
-        normalizePdfState(doc);
-
-        if ((payload?.summary?.kpis || []).length) {
-            recordTocEntry(
-                doc,
-                tocEntries,
-                'Indicadores principales'
-            );
-        }
-
-        renderKpis(doc, payload);
-        normalizePdfState(doc);
-
-        if ((payload?.data?.tables || []).length) {
-            recordTocEntry(
-                doc,
-                tocEntries,
-                'Estadística general'
-            );
-        }
-
-        renderStatisticsTables(doc, payload);
-        normalizePdfState(doc);
-
-        if ((payload?.data?.timeSeries || []).length) {
-            recordTocEntry(
-                doc,
-                tocEntries,
-                'Gráficas'
-            );
-        }
-
-        renderCharts(doc, payload, tocEntries);
-        normalizePdfState(doc);
-
-        const advancedAnalysis =
-            getAdvancedAnalysis(payload);
-
-        if (advancedAnalysis.results.length) {
-            recordTocEntry(
-                doc,
-                tocEntries,
-                'Análisis avanzado'
+            payload._logoBuffer = await loadLogoBuffer(
+                payload?.branding?.logoUrl
             );
 
-            renderAdvancedAnalysisSummary(
-                doc,
-                payload
-            );
+            const branding = getBranding(payload);
 
+            const doc = new PDFDocument({
+                size: 'A4',
+                margin: 42,
+                bufferPages: true,
+                info: {
+                    Title:
+                        branding.coverTitle ||
+                        payload?.meta?.templateName ||
+                        'Reporte Eficentra',
+
+                    Author:
+                        branding.companyName ||
+                        'Eficentra'
+                }
+            });
+
+            doc._eficentraTheme = buildReportTheme(payload);
+
+            doc.on('error', error => {
+                console.error(
+                    '[report-render] PDF stream error:',
+                    error
+                );
+
+                if (!res.destroyed) {
+                    res.destroy(error);
+                }
+            });
+
+            renderCover(doc, payload);
             normalizePdfState(doc);
-        }
 
-        if (getCombinedObservations(payload).length) {
+            const tocEntries = [];
+            const tocPageIndex =
+                reserveTableOfContents(doc);
+
             recordTocEntry(
                 doc,
                 tocEntries,
-                'Observaciones'
+                'Resumen ejecutivo'
             );
+            renderExecutiveSummary(doc, payload);
+            normalizePdfState(doc);
+
+            recordTocEntry(
+                doc,
+                tocEntries,
+                'Calidad de datos'
+            );
+            renderDataQuality(doc, payload);
+            normalizePdfState(doc);
+
+            if ((payload?.summary?.kpis || []).length) {
+                recordTocEntry(
+                    doc,
+                    tocEntries,
+                    'Indicadores principales'
+                );
+            }
+
+            renderKpis(doc, payload);
+            normalizePdfState(doc);
+
+            if ((payload?.data?.tables || []).length) {
+                recordTocEntry(
+                    doc,
+                    tocEntries,
+                    'Estadística general'
+                );
+            }
+
+            renderStatisticsTables(doc, payload);
+            normalizePdfState(doc);
+
+            if ((payload?.data?.timeSeries || []).length) {
+                recordTocEntry(
+                    doc,
+                    tocEntries,
+                    'Gráficas'
+                );
+            }
+
+            renderCharts(doc, payload, tocEntries);
+            normalizePdfState(doc);
+
+            const advancedAnalysis =
+                getAdvancedAnalysis(payload);
+
+            if (advancedAnalysis.results.length) {
+                recordTocEntry(
+                    doc,
+                    tocEntries,
+                    'Análisis avanzado'
+                );
+
+                renderAdvancedAnalysisSummary(
+                    doc,
+                    payload
+                );
+
+                normalizePdfState(doc);
+            }
+
+            if (getCombinedObservations(payload).length) {
+                recordTocEntry(
+                    doc,
+                    tocEntries,
+                    'Observaciones'
+                );
+            }
+
+            renderObservations(doc, payload);
+            normalizePdfState(doc);
+
+            recordTocEntry(
+                doc,
+                tocEntries,
+                'Conclusión'
+            );
+
+            renderConclusion(doc, payload);
+            normalizePdfState(doc);
+
+            renderTableOfContents(
+                doc,
+                payload,
+                tocPageIndex,
+                tocEntries
+            );
+
+            renderPageFooters(doc, payload);
+
+            res.status(200);
+
+            res.setHeader(
+                'Content-Type',
+                'application/pdf'
+            );
+
+            res.setHeader(
+                'Content-Disposition',
+                'inline; filename="report.pdf"'
+            );
+
+            res.setHeader(
+                'Cache-Control',
+                'no-store'
+            );
+
+            doc.pipe(res);
+            doc.end();
+        } catch (err) {
+            console.error(
+                '[report-render] Failed to render report:',
+                err
+            );
+
+            if (!res.headersSent && !res.destroyed) {
+                res.status(500).json({
+                    message:
+                        'Failed to render report',
+                    error:
+                        err?.message ||
+                        'Unknown render error'
+                });
+            } else if (!res.destroyed) {
+                res.destroy(err);
+            }
+        }
+    });
+
+function readIntegerEnvironment(
+    name,
+    fallback,
+    minimum,
+    maximum
+) {
+    const value = Number(
+        process.env[name]
+    );
+
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(
+        minimum,
+        Math.min(
+            maximum,
+            Math.floor(value)
+        )
+    );
+}
+
+function bytesToMegabytes(value) {
+    return Math.round(
+        Number(value || 0) /
+        1024 /
+        1024 *
+        10
+    ) / 10;
+}
+
+async function renderQueueMiddleware(
+    req,
+    res,
+    next
+) {
+    const releaseRenderSlot =
+        await acquireRenderSlot(req, res);
+
+    if (!releaseRenderSlot) {
+        return;
+    }
+
+    let released = false;
+    let outcomeRecorded = false;
+
+    const releaseOnce = () => {
+        if (released) {
+            return;
         }
 
-        renderObservations(doc, payload);
-        normalizePdfState(doc);
+        released = true;
+        releaseRenderSlot();
+    };
 
-        recordTocEntry(
-            doc,
-            tocEntries,
-            'Conclusión'
+    const recordOutcome = success => {
+        if (outcomeRecorded) {
+            return;
+        }
+
+        outcomeRecorded = true;
+
+        if (success) {
+            completedRenders++;
+        } else {
+            failedRenders++;
+        }
+    };
+
+    res.once('finish', () => {
+        recordOutcome(
+            res.statusCode < 500
         );
 
-        renderConclusion(doc, payload);
-        normalizePdfState(doc);
+        releaseOnce();
+    });
 
-        renderTableOfContents(
-            doc,
-            payload,
-            tocPageIndex,
-            tocEntries
-        );
+    res.once('close', () => {
+        if (!res.writableEnded) {
+            recordOutcome(false);
+        }
 
-        renderPageFooters(doc, payload);
+        releaseOnce();
+    });
 
-        doc.end();
-    } catch (err) {
-        console.error('Failed to render report:', err);
-        res.status(500).json({
-            message: 'Failed to render report',
-            error: err.message
-        });
+    next();
+}
+
+function acquireRenderSlot(req, res) {
+    if (req.aborted || res.destroyed) {
+        return Promise.resolve(null);
     }
+
+    if (activeRenders < renderConcurrency) {
+        activeRenders++;
+
+        return Promise.resolve(
+            createRenderSlotRelease()
+        );
+    }
+
+    if (
+        renderMaxQueue === 0 ||
+        renderQueue.length >= renderMaxQueue
+    ) {
+        rejectedRenders++;
+
+        res.setHeader(
+            'Retry-After',
+            '5'
+        );
+
+        res.status(429).json({
+            message:
+                'Report renderer is busy',
+            activeRenders,
+            queuedRenders:
+                renderQueue.length,
+            maxQueue:
+                renderMaxQueue
+        });
+
+        return Promise.resolve(null);
+    }
+
+    return new Promise(resolve => {
+        const entry = {
+            req,
+            res,
+            resolve,
+            enqueuedAt:
+                Date.now(),
+            settled:
+                false,
+            timer:
+                null,
+            cleanup:
+                null
+        };
+
+        const removeFromQueue = () => {
+            const index =
+                renderQueue.indexOf(entry);
+
+            if (index >= 0) {
+                renderQueue.splice(index, 1);
+            }
+        };
+
+        const onAborted = () => {
+            if (entry.settled) {
+                return;
+            }
+
+            entry.settled = true;
+            entry.cleanup?.();
+            removeFromQueue();
+            resolve(null);
+        };
+
+        const onClose = () => {
+            if (!res.writableEnded) {
+                onAborted();
+            }
+        };
+
+        entry.cleanup = () => {
+            if (entry.timer) {
+                clearTimeout(entry.timer);
+                entry.timer = null;
+            }
+
+            req.removeListener(
+                'aborted',
+                onAborted
+            );
+
+            res.removeListener(
+                'close',
+                onClose
+            );
+        };
+
+        req.once(
+            'aborted',
+            onAborted
+        );
+
+        res.once(
+            'close',
+            onClose
+        );
+
+        entry.timer = setTimeout(() => {
+            if (entry.settled) {
+                return;
+            }
+
+            entry.settled = true;
+            entry.cleanup?.();
+            removeFromQueue();
+            rejectedRenders++;
+
+            if (
+                !res.headersSent &&
+                !res.destroyed
+            ) {
+                res.setHeader(
+                    'Retry-After',
+                    '5'
+                );
+
+                res.status(503).json({
+                    message:
+                        'Timed out waiting for a render slot',
+                    queueTimeoutMs:
+                        renderQueueTimeoutMs
+                });
+            }
+
+            resolve(null);
+        }, renderQueueTimeoutMs);
+
+        renderQueue.push(entry);
+    });
+}
+
+function createRenderSlotRelease() {
+    let released = false;
+
+    return () => {
+        if (released) {
+            return;
+        }
+
+        released = true;
+
+        activeRenders = Math.max(
+            0,
+            activeRenders - 1
+        );
+
+        setImmediate(
+            dispatchQueuedRenders
+        );
+    };
+}
+
+function dispatchQueuedRenders() {
+    while (
+        activeRenders < renderConcurrency &&
+        renderQueue.length > 0
+    ) {
+        const entry =
+            renderQueue.shift();
+
+        if (
+            !entry ||
+            entry.settled ||
+            entry.req.aborted ||
+            entry.res.destroyed
+        ) {
+            entry?.cleanup?.();
+            continue;
+        }
+
+        entry.settled = true;
+        entry.cleanup?.();
+
+        activeRenders++;
+
+        totalQueueWaitMs +=
+            Date.now() -
+            entry.enqueuedAt;
+
+        queuedRenderStarts++;
+
+        entry.resolve(
+            createRenderSlotRelease()
+        );
+    }
+}
+
+app.use((err, req, res, next) => {
+    if (err?.type === 'entity.too.large') {
+        rejectedRenders++;
+
+        res.status(413).json({
+            message:
+                'Report payload is too large',
+            maxPayloadMb:
+                renderMaxPayloadMb
+        });
+
+        return;
+    }
+
+    if (
+        err instanceof SyntaxError &&
+        err.status === 400 &&
+        Object.prototype.hasOwnProperty.call(
+            err,
+            'body'
+        )
+    ) {
+        res.status(400).json({
+            message:
+                'Invalid JSON payload'
+        });
+
+        return;
+    }
+
+    next(err);
 });
 
 function reserveTableOfContents(doc) {
@@ -6879,6 +7314,125 @@ function findTimezone(node, depth) {
 
 const port = process.env.PORT || 3000;
 
-app.listen(port, '127.0.0.1', () => {
-    console.log(`Eficentra report render service listening on http://127.0.0.1:${port}`);
-});
+if (
+    cluster.isPrimary &&
+    renderWorkerCount > 1
+) {
+    startRendererCluster();
+} else {
+    startRendererHttpServer();
+}
+
+function startRendererCluster() {
+    let shuttingDown = false;
+
+    console.log(
+        `[report-render] Primary ${process.pid} starting ${renderWorkerCount} workers`
+    );
+
+    for (
+        let index = 0;
+        index < renderWorkerCount;
+        index++
+    ) {
+        cluster.fork();
+    }
+
+    cluster.on(
+        'exit',
+        (worker, code, signal) => {
+            console.error(
+                `[report-render] Worker ${worker.process.pid} exited code=${code} signal=${signal || '-'}`
+            );
+
+            if (!shuttingDown) {
+                cluster.fork();
+            }
+        }
+    );
+
+    const shutdown = signal => {
+        if (shuttingDown) {
+            return;
+        }
+
+        shuttingDown = true;
+
+        console.log(
+            `[report-render] Primary received ${signal}; stopping workers`
+        );
+
+        for (
+            const worker of Object.values(
+                cluster.workers || {}
+            )
+        ) {
+            worker?.process?.kill(
+                'SIGTERM'
+            );
+        }
+
+        setTimeout(
+            () => process.exit(0),
+            10000
+        ).unref();
+    };
+
+    process.once(
+        'SIGTERM',
+        () => shutdown('SIGTERM')
+    );
+
+    process.once(
+        'SIGINT',
+        () => shutdown('SIGINT')
+    );
+}
+
+function startRendererHttpServer() {
+    const server = app.listen(
+        port,
+        '127.0.0.1',
+        () => {
+            console.log(
+                `[report-render] Worker ${process.pid} listening on http://127.0.0.1:${port} workers=${renderWorkerCount} concurrency=${renderConcurrency} maxQueue=${renderMaxQueue}`
+            );
+        }
+    );
+
+    server.keepAliveTimeout = 65000;
+    server.headersTimeout = 66000;
+
+    let shuttingDown = false;
+
+    const shutdown = signal => {
+        if (shuttingDown) {
+            return;
+        }
+
+        shuttingDown = true;
+
+        console.log(
+            `[report-render] Worker ${process.pid} received ${signal}; closing HTTP server`
+        );
+
+        server.close(() => {
+            process.exit(0);
+        });
+
+        setTimeout(
+            () => process.exit(1),
+            10000
+        ).unref();
+    };
+
+    process.once(
+        'SIGTERM',
+        () => shutdown('SIGTERM')
+    );
+
+    process.once(
+        'SIGINT',
+        () => shutdown('SIGINT')
+    );
+}

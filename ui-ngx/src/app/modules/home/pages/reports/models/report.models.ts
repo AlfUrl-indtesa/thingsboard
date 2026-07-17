@@ -134,7 +134,103 @@ export interface ReportSelectableEntity {
   };
 }
 
-export type ReportChartGranularity = "FULL" | "DAY" | "WEEK" | "MONTH";
+/**
+ * Define cómo se divide el rango completo en bloques visuales.
+ *
+ * FULL: una gráfica para todo el periodo.
+ * DAY: una gráfica por día.
+ * WEEK: una gráfica por semana.
+ * MONTH: una gráfica por mes.
+ */
+export type ReportChartGranularity =
+  | "FULL"
+  | "DAY"
+  | "WEEK"
+  | "MONTH";
+
+/**
+ * Define cómo se agrupan las series dentro de las gráficas.
+ */
+export type ReportChartGroupMode =
+  | "ALL_SERIES"
+  | "BY_ENTITY"
+  | "BY_VARIABLE";
+
+/**
+ * Define el título principal de cada gráfica.
+ */
+export type ReportChartTitleMode =
+  | "AUTO"
+  | "ENTITY_NAME"
+  | "VARIABLE_NAME"
+  | "CUSTOM";
+
+/**
+ * Define el orden de las gráficas cuando existen varios
+ * dispositivos y varios periodos.
+ */
+export type ReportChartSortMode =
+  | "ENTITY_THEN_PERIOD"
+  | "PERIOD_THEN_ENTITY";
+
+/**
+ * Define la densidad de contenido por página.
+ */
+export type ReportChartPageDensity =
+  | "AUTO"
+  | "DETAILED"
+  | "COMPACT"
+  | "DENSE";
+
+/**
+ * Define cuánto detalle estadístico aparece debajo de cada gráfica.
+ */
+export type ReportChartTableMode =
+  | "FULL"
+  | "COMPACT"
+  | "NONE";
+
+/**
+ * Define cómo se presentan las leyendas.
+ */
+export type ReportChartLegendMode =
+  | "AUTO"
+  | "PER_CHART"
+  | "SHARED"
+  | "NONE";
+
+/**
+ * Define cómo se nombran las series.
+ */
+export type ReportChartSeriesNameMode =
+  | "AUTO"
+  | "LABEL_ONLY"
+  | "LABEL_AND_ENTITY"
+  | "NUMBERED";
+
+/**
+ * Define la resolución de los puntos utilizados para dibujar.
+ *
+ * Esto no altera los datos utilizados para los KPI y estadísticas.
+ */
+export type ReportChartDataInterval =
+  | "AUTO"
+  | "RAW"
+  | "FIFTEEN_MINUTES"
+  | "THIRTY_MINUTES"
+  | "HOUR"
+  | "CUSTOM";
+
+/**
+ * Define cómo se consolida cada intervalo de dibujo.
+ */
+export type ReportChartBucketAggregation =
+  | "AVG"
+  | "MIN"
+  | "MAX"
+  | "SUM"
+  | "FIRST"
+  | "LAST";
 
 export interface ReportVariableStatsConfig {
   min: boolean;
@@ -145,6 +241,44 @@ export interface ReportVariableStatsConfig {
   first: boolean;
   last: boolean;
   delta: boolean;
+}
+
+export interface ReportCombinedChartConfig {
+  /**
+   * División temporal principal:
+   * periodo completo, día, semana o mes.
+   */
+  granularity: ReportChartGranularity;
+
+  /**
+   * Agrupación de las series:
+   * por dispositivo, por variable o todas juntas.
+   */
+  groupMode: ReportChartGroupMode;
+
+  titleMode: ReportChartTitleMode;
+  customTitle?: string;
+
+  sortMode: ReportChartSortMode;
+
+  /**
+   * Resolución usada exclusivamente para dibujar.
+   */
+  dataInterval: ReportChartDataInterval;
+  customIntervalMinutes?: number;
+  bucketAggregation: ReportChartBucketAggregation;
+
+  pageDensity: ReportChartPageDensity;
+  tableMode: ReportChartTableMode;
+  legendMode: ReportChartLegendMode;
+  seriesNameMode: ReportChartSeriesNameMode;
+
+  /**
+   * Se mantiene por compatibilidad con plantillas anteriores.
+   */
+  tableEnabled: boolean;
+
+  stats: ReportVariableStatsConfig;
 }
 
 export type ReportPerformanceDirection =

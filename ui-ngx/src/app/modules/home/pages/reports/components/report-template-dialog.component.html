@@ -174,80 +174,310 @@
         </mat-select>
       </mat-form-field>
 
-      <div
-        class="combined-chart-config"
-        *ngIf="form.getRawValue().chartLayout === 'COMBINED'">
+      <div class="combined-chart-config" *ngIf="form.getRawValue().chartLayout === 'COMBINED'">
 
         <h4>
-          {{ 'reports.combined_chart_configuration' | translate }}
+          Configuración de gráfica combinada
         </h4>
 
-        <mat-form-field appearance="outline">
-          <mat-label>
-            {{ 'reports.chart_granularity' | translate }}
-          </mat-label>
+        <div class="combined-chart-grid">
 
-          <mat-select formControlName="combinedGranularity">
-            <mat-option value="FULL">
-              {{ 'reports.granularity_full' | translate }}
-            </mat-option>
-            <mat-option value="DAY">
-              {{ 'reports.granularity_day' | translate }}
-            </mat-option>
-            <mat-option value="WEEK">
-              {{ 'reports.granularity_week' | translate }}
-            </mat-option>
-            <mat-option value="MONTH">
-              {{ 'reports.granularity_month' | translate }}
-            </mat-option>
-          </mat-select>
-        </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Agrupar gráficas por</mat-label>
 
-        <div class="combined-chart-options">
+            <mat-select formControlName="combinedGroupMode">
+              <mat-option value="BY_ENTITY">
+                Dispositivo
+              </mat-option>
+
+              <mat-option value="BY_VARIABLE">
+                Variable
+              </mat-option>
+
+              <mat-option value="ALL_SERIES">
+                Todas las series
+              </mat-option>
+            </mat-select>
+
+            <mat-hint>
+              Permite generar una gráfica para cada equipo o comparar equipos por variable.
+            </mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Título de la gráfica</mat-label>
+
+            <mat-select formControlName="combinedTitleMode">
+              <mat-option value="AUTO">
+                Automático
+              </mat-option>
+
+              <mat-option value="ENTITY_NAME">
+                Nombre del dispositivo
+              </mat-option>
+
+              <mat-option value="VARIABLE_NAME">
+                Nombre de la variable
+              </mat-option>
+
+              <mat-option value="CUSTOM">
+                Título personalizado
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" *ngIf="form.getRawValue().combinedTitleMode === 'CUSTOM'">
+
+            <mat-label>Título personalizado</mat-label>
+
+            <input matInput formControlName="combinedCustomTitle" maxlength="120">
+
+            <mat-hint>
+              Ejemplo: Sistema principal de aire comprimido
+            </mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Dividir el periodo por</mat-label>
+
+            <mat-select formControlName="combinedGranularity">
+              <mat-option value="FULL">
+                Periodo completo
+              </mat-option>
+
+              <mat-option value="DAY">
+                Día
+              </mat-option>
+
+              <mat-option value="WEEK">
+                Semana
+              </mat-option>
+
+              <mat-option value="MONTH">
+                Mes
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Orden de las gráficas</mat-label>
+
+            <mat-select formControlName="combinedSortMode">
+              <mat-option value="ENTITY_THEN_PERIOD">
+                Dispositivo y después periodo
+              </mat-option>
+
+              <mat-option value="PERIOD_THEN_ENTITY">
+                Periodo y después dispositivo
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Resolución para dibujo</mat-label>
+
+            <mat-select formControlName="combinedDataInterval">
+              <mat-option value="AUTO">
+                Automática
+              </mat-option>
+
+              <mat-option value="RAW">
+                Todos los puntos
+              </mat-option>
+
+              <mat-option value="FIFTEEN_MINUTES">
+                Cada 15 minutos
+              </mat-option>
+
+              <mat-option value="THIRTY_MINUTES">
+                Cada 30 minutos
+              </mat-option>
+
+              <mat-option value="HOUR">
+                Cada hora
+              </mat-option>
+
+              <mat-option value="CUSTOM">
+                Intervalo personalizado
+              </mat-option>
+            </mat-select>
+
+            <mat-hint>
+              Sólo reduce los puntos dibujados; las estadísticas usan todos los datos.
+            </mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" *ngIf="form.getRawValue().combinedDataInterval === 'CUSTOM'">
+
+            <mat-label>Intervalo personalizado</mat-label>
+
+            <input matInput type="number" min="1" max="10080" formControlName="combinedCustomIntervalMinutes">
+
+            <span matSuffix>min</span>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Agregación del intervalo</mat-label>
+
+            <mat-select formControlName="combinedBucketAggregation">
+              <mat-option value="AVG">
+                Promedio
+              </mat-option>
+
+              <mat-option value="MIN">
+                Mínimo
+              </mat-option>
+
+              <mat-option value="MAX">
+                Máximo
+              </mat-option>
+
+              <mat-option value="SUM">
+                Suma
+              </mat-option>
+
+              <mat-option value="FIRST">
+                Primer valor
+              </mat-option>
+
+              <mat-option value="LAST">
+                Último valor
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Densidad por página</mat-label>
+
+            <mat-select formControlName="combinedPageDensity">
+              <mat-option value="AUTO">
+                Automática
+              </mat-option>
+
+              <mat-option value="DETAILED">
+                Detallada — 1 gráfica
+              </mat-option>
+
+              <mat-option value="COMPACT">
+                Compacta — 2 gráficas
+              </mat-option>
+
+              <mat-option value="DENSE">
+                Densa — 4 gráficas
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Tabla debajo de la gráfica</mat-label>
+
+            <mat-select formControlName="combinedTableMode">
+              <mat-option value="FULL">
+                Completa
+              </mat-option>
+
+              <mat-option value="COMPACT">
+                Compacta
+              </mat-option>
+
+              <mat-option value="NONE">
+                Sin tabla
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Leyenda</mat-label>
+
+            <mat-select formControlName="combinedLegendMode">
+              <mat-option value="AUTO">
+                Automática
+              </mat-option>
+
+              <mat-option value="PER_CHART">
+                En cada gráfica
+              </mat-option>
+
+              <mat-option value="SHARED">
+                Compartida por página
+              </mat-option>
+
+              <mat-option value="NONE">
+                Sin leyenda
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre de las series</mat-label>
+
+            <mat-select formControlName="combinedSeriesNameMode">
+              <mat-option value="AUTO">
+                Automático
+              </mat-option>
+
+              <mat-option value="LABEL_ONLY">
+                Sólo variable
+              </mat-option>
+
+              <mat-option value="LABEL_AND_ENTITY">
+                Variable y dispositivo
+              </mat-option>
+
+              <mat-option value="NUMBERED">
+                Identificador corto
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+        </div>
+
+        <div class="combined-chart-options" *ngIf="form.getRawValue().combinedTableMode !== 'NONE'">
+
+          <div class="combined-options-title">
+            Estadísticas incluidas en la tabla
+          </div>
+
           <label>
-            <input type="checkbox" formControlName="combinedTableEnabled">
-            {{ 'reports.include_table' | translate }}
+            <input type="checkbox" formControlName="combinedStatCount">
+            Muestras
           </label>
 
           <label>
             <input type="checkbox" formControlName="combinedStatMin">
-            {{ 'reports.stat_min' | translate }}
+            Mínimo
           </label>
 
           <label>
             <input type="checkbox" formControlName="combinedStatMax">
-            {{ 'reports.stat_max' | translate }}
+            Máximo
           </label>
 
           <label>
             <input type="checkbox" formControlName="combinedStatAvg">
-            {{ 'reports.stat_avg' | translate }}
-          </label>
-
-          <label>
-            <input type="checkbox" formControlName="combinedStatCount">
-            {{ 'reports.stat_count' | translate }}
+            Promedio
           </label>
 
           <label>
             <input type="checkbox" formControlName="combinedStatSum">
-            {{ 'reports.stat_sum' | translate }}
+            Suma
           </label>
 
           <label>
             <input type="checkbox" formControlName="combinedStatFirst">
-            {{ 'reports.stat_first' | translate }}
+            Primero
           </label>
 
           <label>
             <input type="checkbox" formControlName="combinedStatLast">
-            {{ 'reports.stat_last' | translate }}
+            Último
           </label>
 
           <label>
             <input type="checkbox" formControlName="combinedStatDelta">
-            {{ 'reports.stat_delta' | translate }}
+            Diferencia
           </label>
+
         </div>
       </div>
 
@@ -337,9 +567,7 @@
                 }">
             </mat-form-field>
 
-            <mat-form-field
-              appearance="outline"
-              *ngIf="form.getRawValue().chartLayout !== 'COMBINED'">
+            <mat-form-field appearance="outline" *ngIf="form.getRawValue().chartLayout !== 'COMBINED'">
               <mat-label>
                 {{ 'reports.chart_granularity' | translate }}
               </mat-label>

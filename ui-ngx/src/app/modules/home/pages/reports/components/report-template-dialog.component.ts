@@ -136,9 +136,63 @@ export class ReportTemplateDialogComponent implements OnInit {
     combinedGranularity: new FormControl<string>("FULL", {
       nonNullable: true,
     }),
+
+    combinedGroupMode: new FormControl<string>("BY_ENTITY", {
+      nonNullable: true,
+    }),
+
+    combinedTitleMode: new FormControl<string>("AUTO", {
+      nonNullable: true,
+    }),
+
+    combinedCustomTitle: new FormControl<string>("", {
+      nonNullable: true,
+    }),
+
+    combinedSortMode: new FormControl<string>("ENTITY_THEN_PERIOD", {
+      nonNullable: true,
+    }),
+
+    combinedDataInterval: new FormControl<string>("AUTO", {
+      nonNullable: true,
+    }),
+
+    combinedCustomIntervalMinutes: new FormControl<number>(60, {
+      nonNullable: true,
+      validators: [
+        Validators.min(1),
+        Validators.max(10080),
+      ],
+    }),
+
+    combinedBucketAggregation: new FormControl<string>("AVG", {
+      nonNullable: true,
+    }),
+
+    combinedPageDensity: new FormControl<string>("AUTO", {
+      nonNullable: true,
+    }),
+
+    combinedTableMode: new FormControl<string>("COMPACT", {
+      nonNullable: true,
+    }),
+
+    combinedLegendMode: new FormControl<string>("AUTO", {
+      nonNullable: true,
+    }),
+
+    combinedSeriesNameMode: new FormControl<string>("AUTO", {
+      nonNullable: true,
+    }),
+
+    /*
+     * Se conserva para leer y guardar correctamente
+     * plantillas creadas con la versión anterior.
+     */
     combinedTableEnabled: new FormControl<boolean>(true, {
       nonNullable: true,
     }),
+
     combinedStatMin: new FormControl<boolean>(true, { nonNullable: true }),
     combinedStatMax: new FormControl<boolean>(true, { nonNullable: true }),
     combinedStatAvg: new FormControl<boolean>(true, { nonNullable: true }),
@@ -216,7 +270,23 @@ export class ReportTemplateDialogComponent implements OnInit {
       companyName: template.branding?.companyName || "Eficentra",
       chartLayout: this.extractChartLayoutFromSections(template.sections || []),
       combinedGranularity: combinedChart.granularity,
+
+      combinedGroupMode: combinedChart.groupMode,
+      combinedTitleMode: combinedChart.titleMode,
+      combinedCustomTitle: combinedChart.customTitle,
+      combinedSortMode: combinedChart.sortMode,
+
+      combinedDataInterval: combinedChart.dataInterval,
+      combinedCustomIntervalMinutes: combinedChart.customIntervalMinutes,
+      combinedBucketAggregation: combinedChart.bucketAggregation,
+
+      combinedPageDensity: combinedChart.pageDensity,
+      combinedTableMode: combinedChart.tableMode,
+      combinedLegendMode: combinedChart.legendMode,
+      combinedSeriesNameMode: combinedChart.seriesNameMode,
+
       combinedTableEnabled: combinedChart.tableEnabled,
+
       combinedStatMin: combinedChart.stats.min,
       combinedStatMax: combinedChart.stats.max,
       combinedStatAvg: combinedChart.stats.avg,
@@ -826,14 +896,80 @@ export class ReportTemplateDialogComponent implements OnInit {
   private buildCombinedChartConfig(): any {
     const raw = this.form.getRawValue();
 
+    const tableMode = raw.combinedTableMode === "FULL" ||
+        raw.combinedTableMode === "NONE"
+      ? raw.combinedTableMode
+      : "COMPACT";
+
+    const tableEnabled = tableMode !== "NONE";
+
+    const customIntervalMinutes = raw.combinedCustomIntervalMinutes !== null &&
+        raw.combinedCustomIntervalMinutes !== undefined
+      ? Math.max(
+        1,
+        Math.min(
+          10080,
+          Number(raw.combinedCustomIntervalMinutes),
+        ),
+      )
+      : 60;
+
     return {
+      /*
+       * División temporal de las gráficas.
+       */
       granularity: raw.combinedGranularity || "FULL",
-      tableEnabled: raw.combinedTableEnabled !== false,
+
+      /*
+       * Agrupación por dispositivo, variable o todas las series.
+       */
+      groupMode: raw.combinedGroupMode || "BY_ENTITY",
+
+      /*
+       * Título contextual.
+       */
+      titleMode: raw.combinedTitleMode || "AUTO",
+      customTitle: String(
+        raw.combinedCustomTitle || "",
+      ).trim(),
+
+      /*
+       * Orden cuando existen varios grupos y periodos.
+       */
+      sortMode: raw.combinedSortMode || "ENTITY_THEN_PERIOD",
+
+      /*
+       * Reducción de puntos exclusivamente para el dibujo.
+       * Los KPI y estadísticas continúan usando los datos completos.
+       */
+      dataInterval: raw.combinedDataInterval || "AUTO",
+
+      customIntervalMinutes,
+
+      bucketAggregation: raw.combinedBucketAggregation || "AVG",
+
+      /*
+       * Distribución dentro del PDF.
+       */
+      pageDensity: raw.combinedPageDensity || "AUTO",
+
+      tableMode,
+
+      legendMode: raw.combinedLegendMode || "AUTO",
+
+      seriesNameMode: raw.combinedSeriesNameMode || "AUTO",
+
+      /*
+       * Compatibilidad con el renderer y plantillas anteriores.
+       */
+      tableEnabled,
+
       stats: {
         min: raw.combinedStatMin !== false,
         max: raw.combinedStatMax !== false,
         avg: raw.combinedStatAvg !== false,
         count: raw.combinedStatCount !== false,
+
         sum: raw.combinedStatSum === true,
         first: raw.combinedStatFirst === true,
         last: raw.combinedStatLast === true,
@@ -842,26 +978,125 @@ export class ReportTemplateDialogComponent implements OnInit {
     };
   }
 
-  private extractCombinedChartConfig(sections: any[]): any {
+  private extractCombinedChartConfig(
+    sections: any[],
+  ): any {
     const section = (sections || []).find((item) =>
       item?.config?.combinedChart
     );
+
     const config = section?.config?.combinedChart || {};
+
     const stats = config.stats || {};
 
+    const granularity = config.granularity === "DAY" ||
+        config.granularity === "WEEK" ||
+        config.granularity === "MONTH"
+      ? config.granularity
+      : "FULL";
+
+    const groupMode = config.groupMode === "ALL_SERIES" ||
+        config.groupMode === "BY_VARIABLE"
+      ? config.groupMode
+      : "BY_ENTITY";
+
+    const titleMode = config.titleMode === "ENTITY_NAME" ||
+        config.titleMode === "VARIABLE_NAME" ||
+        config.titleMode === "CUSTOM"
+      ? config.titleMode
+      : "AUTO";
+
+    const sortMode = config.sortMode === "PERIOD_THEN_ENTITY"
+      ? "PERIOD_THEN_ENTITY"
+      : "ENTITY_THEN_PERIOD";
+
+    const dataInterval = config.dataInterval === "RAW" ||
+        config.dataInterval === "FIFTEEN_MINUTES" ||
+        config.dataInterval === "THIRTY_MINUTES" ||
+        config.dataInterval === "HOUR" ||
+        config.dataInterval === "CUSTOM"
+      ? config.dataInterval
+      : "AUTO";
+
+    const bucketAggregation = config.bucketAggregation === "MIN" ||
+        config.bucketAggregation === "MAX" ||
+        config.bucketAggregation === "SUM" ||
+        config.bucketAggregation === "FIRST" ||
+        config.bucketAggregation === "LAST"
+      ? config.bucketAggregation
+      : "AVG";
+
+    /*
+     * Las plantillas anteriores no tienen pageDensity.
+     * DETAILED conserva exactamente su distribución de una
+     * gráfica por página.
+     */
+    const pageDensity = config.pageDensity === "AUTO" ||
+        config.pageDensity === "COMPACT" ||
+        config.pageDensity === "DENSE"
+      ? config.pageDensity
+      : "DETAILED";
+
+    /*
+     * Una plantilla anterior sólo tenía tableEnabled.
+     * Cuando estaba habilitado, equivalía a tabla completa.
+     */
+    const tableMode = config.tableMode === "COMPACT" ||
+        config.tableMode === "NONE"
+      ? config.tableMode
+      : config.tableEnabled === false
+      ? "NONE"
+      : "FULL";
+
+    const legendMode = config.legendMode === "PER_CHART" ||
+        config.legendMode === "SHARED" ||
+        config.legendMode === "NONE"
+      ? config.legendMode
+      : "AUTO";
+
+    const seriesNameMode = config.seriesNameMode === "LABEL_ONLY" ||
+        config.seriesNameMode === "LABEL_AND_ENTITY" ||
+        config.seriesNameMode === "NUMBERED"
+      ? config.seriesNameMode
+      : "AUTO";
+
+    const customIntervalMinutes = Number.isFinite(
+        Number(config.customIntervalMinutes),
+      ) &&
+        Number(config.customIntervalMinutes) > 0
+      ? Math.min(
+        10080,
+        Number(config.customIntervalMinutes),
+      )
+      : 60;
+
     return {
-      granularity:
-        config.granularity === "DAY" ||
-          config.granularity === "WEEK" ||
-          config.granularity === "MONTH"
-          ? config.granularity
-          : "FULL",
-      tableEnabled: config.tableEnabled !== false,
+      granularity,
+
+      groupMode,
+      titleMode,
+      customTitle: String(
+        config.customTitle || "",
+      ),
+      sortMode,
+
+      dataInterval,
+      customIntervalMinutes,
+      bucketAggregation,
+
+      pageDensity,
+      tableMode,
+      legendMode,
+      seriesNameMode,
+
+      tableEnabled: tableMode !== "NONE",
+
       stats: {
         min: stats.min !== false,
         max: stats.max !== false,
         avg: stats.avg !== false,
         count: stats.count !== false,
+
         sum: stats.sum === true,
         first: stats.first === true,
         last: stats.last === true,

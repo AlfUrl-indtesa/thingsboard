@@ -182,7 +182,7 @@
 
         <div class="combined-chart-grid">
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Agrupar gráficas por</mat-label>
 
             <mat-select formControlName="combinedGroupMode">
@@ -204,7 +204,7 @@
             </mat-hint>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Título de la gráfica</mat-label>
 
             <mat-select formControlName="combinedTitleMode">
@@ -226,7 +226,7 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline" *ngIf="form.getRawValue().combinedTitleMode === 'CUSTOM'">
+          <mat-form-field appearance="outline" *ngIf="form.getRawValue().combinedTitleMode === 'CUSTOM'" subscriptSizing="dynamic">
 
             <mat-label>Título personalizado</mat-label>
 
@@ -237,7 +237,7 @@
             </mat-hint>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Dividir el periodo por</mat-label>
 
             <mat-select formControlName="combinedGranularity">
@@ -259,7 +259,7 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Orden de las gráficas</mat-label>
 
             <mat-select formControlName="combinedSortMode">
@@ -273,7 +273,7 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Resolución para dibujo</mat-label>
 
             <mat-select formControlName="combinedDataInterval">
@@ -307,7 +307,7 @@
             </mat-hint>
           </mat-form-field>
 
-          <mat-form-field appearance="outline" *ngIf="form.getRawValue().combinedDataInterval === 'CUSTOM'">
+          <mat-form-field appearance="outline" *ngIf="form.getRawValue().combinedDataInterval === 'CUSTOM'" subscriptSizing="dynamic">
 
             <mat-label>Intervalo personalizado</mat-label>
 
@@ -316,7 +316,7 @@
             <span matSuffix>min</span>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline"subscriptSizing="dynamic">
             <mat-label>Agregación del intervalo</mat-label>
 
             <mat-select formControlName="combinedBucketAggregation">
@@ -346,7 +346,7 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Densidad por página</mat-label>
 
             <mat-select formControlName="combinedPageDensity">
@@ -368,7 +368,7 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Tabla debajo de la gráfica</mat-label>
 
             <mat-select formControlName="combinedTableMode">
@@ -386,7 +386,7 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Leyenda</mat-label>
 
             <mat-select formControlName="combinedLegendMode">
@@ -408,7 +408,7 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Nombre de las series</mat-label>
 
             <mat-select formControlName="combinedSeriesNameMode">
@@ -432,7 +432,7 @@
 
         </div>
 
-        <div class="combined-chart-options" *ngIf="form.getRawValue().combinedTableMode !== 'NONE'">
+        <div class="combined-chart-options" subscriptSizing="dynamic" *ngIf="form.getRawValue().combinedTableMode !== 'NONE'">
 
           <div class="combined-options-title">
             Estadísticas incluidas en la tabla

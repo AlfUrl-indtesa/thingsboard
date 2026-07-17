@@ -1555,6 +1555,16 @@ function renderCombinedChartsWithGranularity(
             combinedConfig
         );
 
+    if (!chartUnits.length) {
+        return;
+    }
+
+    const pageLayout =
+        resolveCombinedPageLayout(
+            combinedConfig,
+            chartUnits
+        );
+
     console.log(
         '[report-render] combined layout:',
         'granularity=',
@@ -1566,21 +1576,33 @@ function renderCombinedChartsWithGranularity(
         'series=',
         series.length,
         'dataInterval=',
-        combinedConfig.dataInterval
+        combinedConfig.dataInterval,
+        'density=',
+        pageLayout.density,
+        'chartsPerPage=',
+        pageLayout.chartsPerPage,
+        'effectiveTableMode=',
+        pageLayout.tableMode
     );
 
-    if (!chartUnits.length) {
-        return;
-    }
-
-    chartUnits.forEach(unit => {
-        renderCombinedChartsPage(
+    if (pageLayout.density === 'DETAILED') {
+        chartUnits.forEach(unit => {
+            renderCombinedChartsPage(
+                doc,
+                payload,
+                unit,
+                combinedConfig
+            );
+        });
+    } else {
+        renderCombinedChartsByDensity(
             doc,
             payload,
-            unit,
-            combinedConfig
+            chartUnits,
+            combinedConfig,
+            pageLayout
         );
-    });
+    }
 
     normalizePdfState(doc);
 }
@@ -1714,6 +1736,570 @@ function getCombinedChartConfig(payload) {
                 rawStats.delta === true
         }
     };
+}
+
+function resolveCombinedPageLayout(
+    combinedConfig,
+    chartUnits
+) {
+    const units =
+        Array.isArray(chartUnits)
+            ? chartUnits
+            : [];
+
+    const maximumSeriesCount =
+        units.reduce(
+            (maximum, unit) =>
+                Math.max(
+                    maximum,
+                    getValidCombinedSeries(unit).length
+                ),
+            0
+        );
+
+    let density =
+        combinedConfig?.pageDensity ||
+        'DETAILED';
+
+    if (density === 'AUTO') {
+        if (units.length <= 4) {
+            density = 'DETAILED';
+        } else if (
+            units.length > 16 &&
+            combinedConfig?.tableMode === 'NONE'
+        ) {
+            density = 'DENSE';
+        } else {
+            density = 'COMPACT';
+        }
+    }
+
+    if (density === 'DENSE') {
+        return {
+            density: 'DENSE',
+
+            chartsPerPage:
+                maximumSeriesCount > 8
+                    ? 2
+                    : 4,
+
+            chartHeight:
+                maximumSeriesCount > 8
+                    ? 105
+                    : 82,
+
+            tableMode:
+                'NONE',
+
+            titleFontSize:
+                9,
+
+            subtitleFontSize:
+                6.8,
+
+            blockGap:
+                8,
+
+            showNormalizationNote:
+                false
+        };
+    }
+
+    if (density === 'COMPACT') {
+        return {
+            density: 'COMPACT',
+
+            chartsPerPage:
+                maximumSeriesCount > 8
+                    ? 1
+                    : 2,
+
+            chartHeight:
+                maximumSeriesCount > 8
+                    ? 135
+                    : 108,
+
+            tableMode:
+                combinedConfig?.tableMode === 'NONE'
+                    ? 'NONE'
+                    : 'COMPACT',
+
+            titleFontSize:
+                10,
+
+            subtitleFontSize:
+                7,
+
+            blockGap:
+                12,
+
+            showNormalizationNote:
+                true
+        };
+    }
+
+    return {
+        density:
+            'DETAILED',
+
+        chartsPerPage:
+            1,
+
+        chartHeight:
+            190,
+
+        tableMode:
+            combinedConfig?.tableMode ||
+            'FULL',
+
+        titleFontSize:
+            12,
+
+        subtitleFontSize:
+            8,
+
+        blockGap:
+            16,
+
+        showNormalizationNote:
+            true
+    };
+}
+
+function getValidCombinedSeries(unit) {
+    return (unit?.series || [])
+        .filter(item =>
+            (item?.points || [])
+                .some(point =>
+                    point &&
+                    Number.isFinite(
+                        Number(point.value)
+                    ) &&
+                    Number.isFinite(
+                        Number(point.ts)
+                    )
+                )
+        );
+}
+
+function renderCombinedChartsByDensity(
+    doc,
+    payload,
+    chartUnits,
+    combinedConfig,
+    pageLayout
+) {
+    let unitIndex = 0;
+    let pageIndex = 0;
+
+    while (unitIndex < chartUnits.length) {
+        let pageUnits =
+            chartUnits.slice(
+                unitIndex,
+                unitIndex +
+                pageLayout.chartsPerPage
+            );
+
+        /*
+         * Cuatro gráficas densas sólo se mantienen cuando
+         * todas comparten la misma leyenda.
+         *
+         * Cuando las series son diferentes, se reducen a
+         * dos gráficas para conservar legibilidad.
+         */
+        if (
+            pageLayout.density === 'DENSE' &&
+            pageUnits.length > 2 &&
+            !canShareCombinedLegend(
+                pageUnits,
+                combinedConfig
+            )
+        ) {
+            pageUnits =
+                pageUnits.slice(
+                    0,
+                    2
+                );
+        }
+
+        if (!pageUnits.length) {
+            break;
+        }
+
+        /*
+         * La primera página puede comenzar debajo del título
+         * de sección. Las siguientes empiezan en una página
+         * nueva.
+         */
+        if (pageIndex > 0) {
+            doc.addPage();
+            normalizePdfState(doc);
+        } else {
+            ensureSpace(
+                doc,
+                pageLayout.density === 'DENSE'
+                    ? 520
+                    : 600
+            );
+        }
+
+        const sharedLegendSeries =
+            shouldRenderSharedCombinedLegend(
+                pageUnits,
+                combinedConfig,
+                pageLayout
+            )
+                ? getValidCombinedSeries(
+                    pageUnits[0]
+                )
+                : null;
+
+        /*
+         * La explicación de normalización sólo se muestra
+         * una vez, en lugar de repetirse para cada gráfica.
+         */
+        if (
+            pageLayout.showNormalizationNote &&
+            pageIndex === 0 &&
+            pageUnits.some(unit =>
+                getValidCombinedSeries(unit)
+                    .length > 1
+            )
+        ) {
+            renderCombinedNormalizationNote(
+                doc
+            );
+        }
+
+        /*
+         * Cuando las gráficas contienen las mismas series,
+         * la leyenda se dibuja una sola vez para toda la
+         * página.
+         */
+        if (sharedLegendSeries) {
+            renderCombinedLegend(
+                doc,
+                sharedLegendSeries,
+                combinedConfig
+            );
+
+            normalizePdfState(doc);
+            doc.moveDown(0.2);
+        }
+
+        pageUnits.forEach(
+            (unit, index) => {
+                renderCombinedChartDensityBlock(
+                    doc,
+                    payload,
+                    unit,
+                    combinedConfig,
+                    pageLayout,
+                    Boolean(
+                        sharedLegendSeries
+                    )
+                );
+
+                if (
+                    index <
+                    pageUnits.length - 1
+                ) {
+                    doc.y +=
+                        pageLayout.blockGap;
+
+                    normalizePdfState(doc);
+                }
+            }
+        );
+
+        unitIndex +=
+            pageUnits.length;
+
+        pageIndex++;
+    }
+}
+
+function renderCombinedNormalizationNote(doc) {
+    doc.font('Helvetica')
+        .fontSize(7.2)
+        .fillColor('#5F6B76')
+        .text(
+            'Las series se normalizan para comparar su comportamiento relativo aun cuando utilizan unidades diferentes.',
+            doc.page.margins.left,
+            doc.y,
+            {
+                width:
+                    doc.page.width -
+                    doc.page.margins.left -
+                    doc.page.margins.right,
+
+                lineGap:
+                    1
+            }
+        );
+
+    doc.moveDown(0.45);
+
+    normalizePdfState(doc);
+}
+
+function shouldRenderSharedCombinedLegend(
+    pageUnits,
+    combinedConfig,
+    pageLayout
+) {
+    const legendMode =
+        combinedConfig?.legendMode ||
+        'AUTO';
+
+    if (
+        legendMode === 'NONE' ||
+        legendMode === 'PER_CHART'
+    ) {
+        return false;
+    }
+
+    if (
+        legendMode === 'AUTO' &&
+        pageLayout.density === 'DETAILED'
+    ) {
+        return false;
+    }
+
+    return canShareCombinedLegend(
+        pageUnits,
+        combinedConfig
+    );
+}
+
+function canShareCombinedLegend(
+    pageUnits,
+    combinedConfig
+) {
+    const signatures =
+        (pageUnits || [])
+            .map(unit =>
+                getCombinedLegendSignature(
+                    getValidCombinedSeries(
+                        unit
+                    ),
+                    combinedConfig
+                )
+            )
+            .filter(Boolean);
+
+    return (
+        signatures.length > 0 &&
+        signatures.every(
+            signature =>
+                signature ===
+                signatures[0]
+        )
+    );
+}
+
+function getCombinedLegendSignature(
+    series,
+    combinedConfig
+) {
+    return buildCombinedSeriesDisplayEntries(
+        series,
+        combinedConfig
+    )
+        .map(entry => {
+            const colorIndex =
+                Number.isInteger(
+                    entry.item?.__colorIndex
+                )
+                    ? entry.item.__colorIndex
+                    : entry.index;
+
+            return `${colorIndex}:${entry.displayName}`;
+        })
+        .join('|');
+}
+
+function renderCombinedChartDensityBlock(
+    doc,
+    payload,
+    unit,
+    combinedConfig,
+    pageLayout,
+    sharedLegendRendered
+) {
+    const validSeries =
+        getValidCombinedSeries(
+            unit
+        );
+
+    if (!validSeries.length) {
+        return;
+    }
+
+    const title =
+        resolveCombinedChartTitle(
+            unit,
+            combinedConfig
+        );
+
+    const periodSubtitle =
+        resolveCombinedPeriodSubtitle(
+            unit
+        );
+
+    const contentWidth =
+        doc.page.width -
+        doc.page.margins.left -
+        doc.page.margins.right;
+
+    const titleHeight =
+        pageLayout.density === 'DENSE'
+            ? 14
+            : 17;
+
+    doc.font('Helvetica-Bold')
+        .fontSize(
+            pageLayout.titleFontSize
+        )
+        .fillColor('#111111')
+        .text(
+            title,
+            doc.page.margins.left,
+            doc.y,
+            {
+                width:
+                    contentWidth,
+
+                height:
+                    titleHeight,
+
+                ellipsis:
+                    true,
+
+                lineBreak:
+                    false
+            }
+        );
+
+    doc.y +=
+        titleHeight;
+
+    if (periodSubtitle) {
+        doc.font('Helvetica')
+            .fontSize(
+                pageLayout.subtitleFontSize
+            )
+            .fillColor('#5F6B76')
+            .text(
+                periodSubtitle,
+                doc.page.margins.left,
+                doc.y,
+                {
+                    width:
+                        contentWidth,
+
+                    height:
+                        10,
+
+                    ellipsis:
+                        true,
+
+                    lineBreak:
+                        false
+                }
+            );
+
+        doc.y +=
+            11;
+    }
+
+    const chartBox = {
+        x:
+            doc.page.margins.left,
+
+        y:
+            doc.y + 7,
+
+        width:
+            contentWidth,
+
+        height:
+            pageLayout.chartHeight
+    };
+
+    /*
+     * Sólo se reducen los puntos utilizados para dibujar.
+     * Las tablas y estadísticas conservan la serie original.
+     */
+    const drawingSeries =
+        prepareCombinedSeriesForDrawing(
+            validSeries,
+            combinedConfig
+        );
+
+    drawNormalizedCombinedLineChart(
+        doc,
+        drawingSeries,
+        chartBox,
+        getPayloadTimezone(payload)
+    );
+
+    doc.y =
+        chartBox.y +
+        chartBox.height +
+        13;
+
+    resetCursor(doc);
+
+    const effectiveLegendMode =
+        resolveEffectiveLegendMode(
+            combinedConfig,
+            validSeries
+        );
+
+    if (
+        !sharedLegendRendered &&
+        effectiveLegendMode !== 'NONE'
+    ) {
+        renderCombinedLegend(
+            doc,
+            validSeries,
+            combinedConfig
+        );
+
+        normalizePdfState(doc);
+        doc.moveDown(0.1);
+    }
+
+    if (
+        pageLayout.tableMode !== 'NONE'
+    ) {
+        renderCombinedSeriesStatsTable(
+            doc,
+            validSeries,
+            {
+                ...combinedConfig,
+
+                tableMode:
+                    pageLayout.tableMode
+            },
+            {
+                compact:
+                    true,
+
+                /*
+                 * No se permite que una tabla compacta cree
+                 * una página por su cuenta, porque el bloque
+                 * ya fue distribuido por el algoritmo de
+                 * densidad.
+                 */
+                allowPageBreak:
+                    false
+            }
+        );
+
+        normalizePdfState(doc);
+    }
 }
 
 function normalizeCombinedOption(
@@ -3409,7 +3995,8 @@ function renderCombinedLegend(
 function renderCombinedSeriesStatsTable(
     doc,
     series,
-    combinedConfig = {}
+    combinedConfig = {},
+    tableOptions = {}
 ) {
     const configuredStats =
         combinedConfig?.stats || {};
@@ -3641,30 +4228,50 @@ function renderCombinedSeriesStatsTable(
     renderFlexibleCombinedStatsTable(
         doc,
         columns,
-        rows
+        rows,
+        tableOptions
     );
 }
 
 function renderFlexibleCombinedStatsTable(
     doc,
     columns,
-    rows
+    rows,
+    options = {}
 ) {
+    const compact =
+        options.compact === true;
+
+    const allowPageBreak =
+        options.allowPageBreak !== false;
+
     const startX =
-        doc.page.margins.left;
+        Number.isFinite(
+            Number(options.startX)
+        )
+            ? Number(options.startX)
+            : doc.page.margins.left;
 
     const tableWidth =
-        doc.page.width -
-        doc.page.margins.left -
-        doc.page.margins.right;
+        Number.isFinite(
+            Number(options.width)
+        )
+            ? Number(options.width)
+            : doc.page.width -
+            doc.page.margins.left -
+            doc.page.margins.right;
 
     const headerHeight =
-        18;
+        compact
+            ? 15
+            : 18;
 
     const columnWeights =
         columns.map(column => {
             if (column.key === 'series') {
-                return 2.45;
+                return compact
+                    ? 2.75
+                    : 2.45;
             }
 
             if (column.key === 'unit') {
@@ -3698,9 +4305,18 @@ function renderFlexibleCombinedStatsTable(
         );
 
     const fontSize =
-        columns.length >= 9
-            ? 5.8
-            : 6.4;
+        compact
+            ? columns.length >= 9
+                ? 5.1
+                : 5.8
+            : columns.length >= 9
+                ? 5.8
+                : 6.4;
+
+    const verticalPadding =
+        compact
+            ? 3
+            : 5;
 
     const drawHeader =
         y => {
@@ -3723,7 +4339,12 @@ function renderFlexibleCombinedStatsTable(
                         .text(
                             column.label,
                             x + 3,
-                            y + 6,
+                            y +
+                            (
+                                compact
+                                    ? 4
+                                    : 6
+                            ),
                             {
                                 width:
                                     columnWidths[index] -
@@ -3748,147 +4369,180 @@ function renderFlexibleCombinedStatsTable(
 
             doc.font('Helvetica');
 
-            return (
-                y +
-                headerHeight
-            );
+            return y + headerHeight;
         };
 
-    ensureSpace(
-        doc,
-        headerHeight + 42
-    );
+    /*
+     * El comportamiento anterior se conserva para las
+     * tablas detalladas. Las tablas compactas ya fueron
+     * posicionadas por el algoritmo de densidad.
+     */
+    if (allowPageBreak) {
+        ensureSpace(
+            doc,
+            headerHeight + 42
+        );
+    }
 
     let y =
-        drawHeader(doc.y);
+        drawHeader(
+            doc.y
+        );
 
-    rows.forEach((row, rowIndex) => {
-        const seriesColumnIndex =
-            columns.findIndex(
-                column =>
-                    column.key ===
-                    'series'
-            );
-
-        const seriesWidth =
-            seriesColumnIndex >= 0
-                ? columnWidths[
-                seriesColumnIndex
-                ]
-                : 100;
-
-        const seriesText =
-            String(
-                row.series || '-'
-            );
-
-        const measuredHeight =
-            doc.font('Helvetica')
-                .fontSize(fontSize)
-                .heightOfString(
-                    seriesText,
-                    {
-                        width:
-                            seriesWidth -
-                            8,
-
-                        lineGap:
-                            0
-                    }
+    rows.forEach(
+        (row, rowIndex) => {
+            const seriesColumnIndex =
+                columns.findIndex(
+                    column =>
+                        column.key ===
+                        'series'
                 );
 
-        const rowHeight =
-            Math.max(
-                18,
-                Math.min(
-                    32,
-                    measuredHeight + 8
-                )
-            );
+            const seriesWidth =
+                seriesColumnIndex >= 0
+                    ? columnWidths[
+                    seriesColumnIndex
+                    ]
+                    : 100;
 
-        if (
-            y + rowHeight >
-            doc.page.height -
-            doc.page.margins.bottom
-        ) {
-            doc.addPage();
-
-            y =
-                drawHeader(
-                    doc.y
+            const seriesText =
+                String(
+                    row.series || '-'
                 );
-        }
 
-        doc.rect(
-            startX,
-            y,
-            tableWidth,
-            rowHeight
-        )
-            .fill(
-                rowIndex % 2 === 0
-                    ? '#FFFFFF'
-                    : '#F7FAFC'
-            );
-
-        let x =
-            startX;
-
-        columns.forEach(
-            (column, columnIndex) => {
-                const rawValue =
-                    row[column.key] !==
-                        undefined &&
-                        row[column.key] !==
-                        null
-                        ? row[column.key]
-                        : '-';
-
-                const isSeriesColumn =
-                    column.key ===
-                    'series';
-
-                doc.fillColor('#222222')
-                    .font('Helvetica')
+            const measuredHeight =
+                doc.font('Helvetica')
                     .fontSize(fontSize)
-                    .text(
-                        String(rawValue),
-                        x + 3,
-                        y + 5,
+                    .heightOfString(
+                        seriesText,
                         {
                             width:
-                                columnWidths[
-                                columnIndex
-                                ] - 6,
+                                seriesWidth - 8,
 
-                            height:
-                                rowHeight - 8,
-
-                            align:
-                                column.align ||
-                                'left',
-
-                            lineBreak:
-                                isSeriesColumn,
-
-                            ellipsis:
-                                true
+                            lineGap:
+                                0
                         }
                     );
 
-                x +=
-                    columnWidths[
-                    columnIndex
-                    ];
-            }
-        );
+            const minimumRowHeight =
+                compact
+                    ? 14
+                    : 18;
 
-        y +=
-            rowHeight;
-    });
+            const maximumRowHeight =
+                compact
+                    ? 22
+                    : 32;
+
+            const rowHeight =
+                Math.max(
+                    minimumRowHeight,
+                    Math.min(
+                        maximumRowHeight,
+                        measuredHeight +
+                        (
+                            compact
+                                ? 5
+                                : 8
+                        )
+                    )
+                );
+
+            if (
+                allowPageBreak &&
+                y + rowHeight >
+                doc.page.height -
+                doc.page.margins.bottom
+            ) {
+                doc.addPage();
+
+                y =
+                    drawHeader(
+                        doc.y
+                    );
+            }
+
+            doc.rect(
+                startX,
+                y,
+                tableWidth,
+                rowHeight
+            )
+                .fill(
+                    rowIndex % 2 === 0
+                        ? '#FFFFFF'
+                        : '#F7FAFC'
+                );
+
+            let x =
+                startX;
+
+            columns.forEach(
+                (
+                    column,
+                    columnIndex
+                ) => {
+                    const rawValue =
+                        row[column.key] !==
+                            undefined &&
+                            row[column.key] !==
+                            null
+                            ? row[column.key]
+                            : '-';
+
+                    const isSeriesColumn =
+                        column.key ===
+                        'series';
+
+                    doc.fillColor('#222222')
+                        .font('Helvetica')
+                        .fontSize(fontSize)
+                        .text(
+                            String(rawValue),
+                            x + 3,
+                            y + verticalPadding,
+                            {
+                                width:
+                                    columnWidths[
+                                    columnIndex
+                                    ] - 6,
+
+                                height:
+                                    rowHeight -
+                                    verticalPadding -
+                                    2,
+
+                                align:
+                                    column.align ||
+                                    'left',
+
+                                lineBreak:
+                                    isSeriesColumn,
+
+                                ellipsis:
+                                    true
+                            }
+                        );
+
+                    x +=
+                        columnWidths[
+                        columnIndex
+                        ];
+                }
+            );
+
+            y +=
+                rowHeight;
+        }
+    );
 
     doc.y =
-        y + 10;
+        y +
+        (
+            compact
+                ? 6
+                : 10
+        );
 
     resetCursor(doc);
 }

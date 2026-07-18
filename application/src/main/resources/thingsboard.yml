@@ -122,8 +122,22 @@ report:
   render:
     base-url: "${REPORT_RENDER_BASE_URL:http://127.0.0.1:3000}"
     render-path: "${REPORT_RENDER_PATH:/render-report}"
+
+    # Timeout para establecer la conexión con el renderer.
     connect-timeout-ms: "${REPORT_RENDER_CONNECT_TIMEOUT_MS:5000}"
-    read-timeout-ms: "${REPORT_RENDER_READ_TIMEOUT_MS:120000}"
+
+    # Incluye espera en cola, generación y transferencia del PDF.
+    read-timeout-ms: "${REPORT_RENDER_READ_TIMEOUT_MS:420000}"
+
+    # Número total de intentos, incluyendo la solicitud inicial.
+    max-attempts: "${REPORT_RENDER_MAX_ATTEMPTS:3}"
+
+    # Backoff exponencial entre reintentos.
+    initial-backoff-ms: "${REPORT_RENDER_INITIAL_BACKOFF_MS:1000}"
+    max-backoff-ms: "${REPORT_RENDER_MAX_BACKOFF_MS:30000}"
+
+    # Tamaño máximo permitido para el PDF recibido.
+    max-pdf-size-mb: "${REPORT_RENDER_MAX_PDF_SIZE_MB:100}"
 
 # ZooKeeper connection parameters
 # Controls ZooKeeper-based service discovery and cluster coordination for microservice deployments.

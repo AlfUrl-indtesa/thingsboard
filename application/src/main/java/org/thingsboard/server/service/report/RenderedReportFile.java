@@ -5,13 +5,14 @@
  */
 package org.thingsboard.server.service.report;
 
-import com.fasterxml.jackson.databind.JsonNode;
-
 import java.nio.file.Path;
 
-public interface ReportRenderService {
-
-    RenderedReportFile renderPdf(
-            JsonNode payload,
-            Path targetFile);
+/**
+ * Metadata for a PDF streamed to a staging file.
+ */
+public record RenderedReportFile(
+        Path path,
+        long size,
+        String checksum,
+        String requestId) {
 }

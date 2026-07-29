@@ -19,6 +19,16 @@ import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.thingsboard.server.common.data.report.ReportErrorCode;
+import java.io.BufferedOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -39,6 +49,16 @@ public class RemoteReportRenderService
         private static final int MAX_ERROR_BODY_BYTES = 16 * 1024;
 
         private static final int MAX_ERROR_MESSAGE_LENGTH = 500;
+
+        private static final int COPY_BUFFER_SIZE = 64 * 1024;
+
+        private static final byte[] PDF_SIGNATURE = new byte[] {
+                        '%',
+                        'P',
+                        'D',
+                        'F',
+                        '-'
+        };
 
         private final ReportRenderProperties properties;
         private final ObjectMapper objectMapper;
@@ -93,16 +113,13 @@ public class RemoteReportRenderService
         }
 
         @Override
-        public byte[] renderPdf(
-                        JsonNode payload) {
+        public RenderedReportFile renderPdf(
+                        JsonNode payload,
+                        Path targetFile) {
 
-                if (payload == null
-                                || payload.isNull()) {
-
-                        throw new ReportServiceException(
-                                        ReportErrorCode.PDF_RENDER_FAILED,
-                                        "Report payload is empty");
-                }
+                validateRenderInputs(
+                                payload,
+                                targetFile);
 
                 String url = buildRenderUrl();
 
@@ -119,7 +136,8 @@ public class RemoteReportRenderService
                                 RenderHttpResponse response = executeRenderRequest(
                                                 url,
                                                 payload,
-                                                requestId);
+                                                requestId,
+                                                targetFile);
 
                                 if (response == null) {
                                         throw new ReportServiceException(
@@ -129,10 +147,26 @@ public class RemoteReportRenderService
 
                                 if (isSuccessful(
                                                 response.statusCode())) {
+                                        RenderedReportFile renderedFile = response.renderedFile();
 
-                                        return validatePdfResponse(
-                                                        response,
+                                        if (renderedFile == null) {
+                                                throw new ReportServiceException(
+                                                                ReportErrorCode.PDF_RENDER_FAILED,
+                                                                "Render service returned no staged PDF file");
+                                        }
+
+                                        validateResponseContentType(
+                                                        response.headers(),
                                                         requestId);
+
+                                        log.info(
+                                                        "[report-render-client] requestId={} "
+                                                                        + "render completed: {} bytes streamed to {}",
+                                                        requestId,
+                                                        renderedFile.size(),
+                                                        renderedFile.path());
+
+                                        return renderedFile;
                                 }
 
                                 if (isRetryableStatus(
@@ -163,9 +197,6 @@ public class RemoteReportRenderService
                                                 requestId);
 
                         } catch (ResourceAccessException e) {
-                                /*
-                                 * Incluye errores de conexión y timeout.
-                                 */
                                 if (attempt < maxAttempts) {
                                         long delayMs = resolveBackoffMs(
                                                         attempt);
@@ -212,7 +243,8 @@ public class RemoteReportRenderService
         private RenderHttpResponse executeRenderRequest(
                         String url,
                         JsonNode payload,
-                        String requestId) {
+                        String requestId,
+                        Path targetFile) {
 
                 return restTemplate.execute(
                                 url,
@@ -232,10 +264,6 @@ public class RemoteReportRenderService
                                                         "X-Eficentra-Render-Request-Id",
                                                         requestId);
 
-                                        /*
-                                         * El JSON se escribe directamente al stream
-                                         * de la solicitud.
-                                         */
                                         objectMapper.writeValue(
                                                         request.getBody(),
                                                         payload);
@@ -251,92 +279,159 @@ public class RemoteReportRenderService
                                         responseHeaders.putAll(
                                                         response.getHeaders());
 
-                                        int bodyLimit = isSuccessful(statusCode)
-                                                        ? maximumPdfBytes()
-                                                        : MAX_ERROR_BODY_BYTES;
+                                        if (isSuccessful(statusCode)) {
+                                                validateDeclaredLength(
+                                                                responseHeaders);
 
-                                        long declaredLength = responseHeaders
-                                                        .getContentLength();
+                                                RenderedReportFile renderedFile = streamPdfToFile(
+                                                                response.getBody(),
+                                                                targetFile,
+                                                                requestId);
 
-                                        if (isSuccessful(statusCode)
-                                                        && declaredLength > bodyLimit) {
-                                                throw new ReportServiceException(
-                                                                ReportErrorCode.PDF_RENDER_FAILED,
-                                                                "Render service PDF exceeds the "
-                                                                                + "configured maximum size of "
-                                                                                + properties.getMaxPdfSizeMb()
-                                                                                + " MB");
+                                                return new RenderHttpResponse(
+                                                                statusCode,
+                                                                responseHeaders,
+                                                                renderedFile,
+                                                                null);
                                         }
 
-                                        /*
-                                         * Se lee como máximo un byte adicional para
-                                         * detectar respuestas superiores al límite.
-                                         */
-                                        byte[] body = response
-                                                        .getBody()
-                                                        .readNBytes(
-                                                                        bodyLimit + 1);
-
-                                        if (body.length > bodyLimit) {
-                                                if (isSuccessful(statusCode)) {
-                                                        throw new ReportServiceException(
-                                                                        ReportErrorCode.PDF_RENDER_FAILED,
-                                                                        "Render service PDF exceeds the "
-                                                                                        + "configured maximum size of "
-                                                                                        + properties.getMaxPdfSizeMb()
-                                                                                        + " MB");
-                                                }
-
-                                                body = Arrays.copyOf(
-                                                                body,
-                                                                bodyLimit);
-                                        }
+                                        byte[] errorBody = readLimitedErrorBody(
+                                                        response.getBody());
 
                                         return new RenderHttpResponse(
                                                         statusCode,
                                                         responseHeaders,
-                                                        body);
+                                                        null,
+                                                        errorBody);
                                 });
         }
 
-        private byte[] validatePdfResponse(
-                        RenderHttpResponse response,
+        private RenderedReportFile streamPdfToFile(
+                        InputStream inputStream,
+                        Path targetFile,
+                        String requestId)
+                        throws IOException {
+
+                Path normalizedTarget = targetFile
+                                .toAbsolutePath()
+                                .normalize();
+
+                Files.createDirectories(
+                                normalizedTarget.getParent());
+
+                MessageDigest digest = createSha256Digest();
+
+                long maximumBytes = maximumPdfBytes();
+
+                byte[] signature = inputStream.readNBytes(
+                                PDF_SIGNATURE.length);
+
+                if (!Arrays.equals(
+                                signature,
+                                PDF_SIGNATURE)) {
+                        throw new ReportServiceException(
+                                        ReportErrorCode.PDF_RENDER_FAILED,
+                                        "Render service returned invalid PDF content");
+                }
+
+                long totalBytes = signature.length;
+
+                try (
+                                OutputStream outputStream = new BufferedOutputStream(
+                                                Files.newOutputStream(
+                                                                normalizedTarget,
+                                                                StandardOpenOption.WRITE,
+                                                                StandardOpenOption.TRUNCATE_EXISTING),
+                                                COPY_BUFFER_SIZE)) {
+                        outputStream.write(signature);
+                        digest.update(signature);
+
+                        byte[] buffer = new byte[COPY_BUFFER_SIZE];
+
+                        int read;
+
+                        while ((read = inputStream.read(buffer)) != -1) {
+                                totalBytes += read;
+
+                                if (totalBytes > maximumBytes) {
+                                        throw new ReportServiceException(
+                                                        ReportErrorCode.PDF_RENDER_FAILED,
+                                                        "Render service PDF exceeds the "
+                                                                        + "configured maximum size of "
+                                                                        + properties.getMaxPdfSizeMb()
+                                                                        + " MB");
+                                }
+
+                                outputStream.write(
+                                                buffer,
+                                                0,
+                                                read);
+
+                                digest.update(
+                                                buffer,
+                                                0,
+                                                read);
+                        }
+                }
+
+                if (totalBytes <= PDF_SIGNATURE.length) {
+
+                        throw new ReportServiceException(
+                                        ReportErrorCode.PDF_RENDER_FAILED,
+                                        "Render service returned an incomplete PDF file");
+                }
+
+                return new RenderedReportFile(
+                                normalizedTarget,
+                                totalBytes,
+                                HexFormat.of()
+                                                .formatHex(
+                                                                digest.digest()),
+                                requestId);
+        }
+
+        private byte[] readLimitedErrorBody(
+                        InputStream inputStream)
+                        throws IOException {
+
+                byte[] body = inputStream.readNBytes(
+                                MAX_ERROR_BODY_BYTES + 1);
+
+                return body.length <= MAX_ERROR_BODY_BYTES
+                                ? body
+                                : Arrays.copyOf(
+                                                body,
+                                                MAX_ERROR_BODY_BYTES);
+        }
+
+        private void validateDeclaredLength(
+                        HttpHeaders headers) {
+
+                long declaredLength = headers.getContentLength();
+
+                if (declaredLength > maximumPdfBytes()) {
+
+                        throw new ReportServiceException(
+                                        ReportErrorCode.PDF_RENDER_FAILED,
+                                        "Render service PDF exceeds the "
+                                                        + "configured maximum size of "
+                                                        + properties.getMaxPdfSizeMb()
+                                                        + " MB");
+                }
+        }
+
+        private void validateResponseContentType(
+                        HttpHeaders headers,
                         String requestId) {
 
-                byte[] body = response.body();
-
-                if (body == null
-                                || body.length == 0) {
-
-                        throw new ReportServiceException(
-                                        ReportErrorCode.PDF_RENDER_FAILED,
-                                        "Render service returned empty PDF content");
-                }
-
-                /*
-                 * No basta con confiar en Content-Type.
-                 * El archivo debe comenzar con la firma %PDF-.
-                 */
-                if (!hasPdfSignature(body)) {
-                        String preview = sanitizeBodyPreview(body);
-
-                        throw new ReportServiceException(
-                                        ReportErrorCode.PDF_RENDER_FAILED,
-                                        "Render service returned invalid PDF content"
-                                                        + (preview.isBlank()
-                                                                        ? ""
-                                                                        : ": " + preview));
-                }
-
-                MediaType contentType = response
-                                .headers()
-                                .getContentType();
+                MediaType contentType = headers.getContentType();
 
                 if (contentType != null
                                 && !MediaType.APPLICATION_PDF
                                                 .isCompatibleWith(contentType)
                                 && !MediaType.APPLICATION_OCTET_STREAM
                                                 .isCompatibleWith(contentType)) {
+
                         log.warn(
                                         "[report-render-client] requestId={} "
                                                         + "valid PDF signature received with "
@@ -344,14 +439,51 @@ public class RemoteReportRenderService
                                         requestId,
                                         contentType);
                 }
+        }
 
-                log.info(
-                                "[report-render-client] requestId={} "
-                                                + "render completed: {} bytes",
-                                requestId,
-                                body.length);
+        private void validateRenderInputs(
+                        JsonNode payload,
+                        Path targetFile) {
 
-                return body;
+                if (payload == null
+                                || payload.isNull()) {
+
+                        throw new ReportServiceException(
+                                        ReportErrorCode.PDF_RENDER_FAILED,
+                                        "Report payload is empty");
+                }
+
+                if (targetFile == null) {
+                        throw new ReportServiceException(
+                                        ReportErrorCode.PDF_RENDER_FAILED,
+                                        "Report staging file is required");
+                }
+
+                Path normalizedTarget = targetFile
+                                .toAbsolutePath()
+                                .normalize();
+
+                if (!Files.exists(normalizedTarget)
+                                || !Files.isRegularFile(
+                                                normalizedTarget)) {
+                        throw new ReportServiceException(
+                                        ReportErrorCode.PDF_RENDER_FAILED,
+                                        "Report staging file does not exist: "
+                                                        + normalizedTarget);
+                }
+        }
+
+        private MessageDigest createSha256Digest() {
+                try {
+                        return MessageDigest.getInstance(
+                                        "SHA-256");
+
+                } catch (NoSuchAlgorithmException e) {
+                        throw new ReportServiceException(
+                                        ReportErrorCode.PDF_RENDER_FAILED,
+                                        "SHA-256 algorithm is not available",
+                                        e);
+                }
         }
 
         private ReportServiceException buildHttpFailure(
@@ -359,7 +491,7 @@ public class RemoteReportRenderService
                         String requestId) {
 
                 String detail = extractErrorMessage(
-                                response.body());
+                                response.errorBody());
 
                 String category;
 
@@ -555,17 +687,6 @@ public class RemoteReportRenderService
                                 * 1024;
         }
 
-        private boolean hasPdfSignature(
-                        byte[] body) {
-
-                return body.length >= 5
-                                && body[0] == '%'
-                                && body[1] == 'P'
-                                && body[2] == 'D'
-                                && body[3] == 'F'
-                                && body[4] == '-';
-        }
-
         private boolean isSuccessful(
                         int statusCode) {
 
@@ -710,6 +831,7 @@ public class RemoteReportRenderService
         private record RenderHttpResponse(
                         int statusCode,
                         HttpHeaders headers,
-                        byte[] body) {
+                        RenderedReportFile renderedFile,
+                        byte[] errorBody) {
         }
 }

@@ -12,30 +12,30 @@ import java.nio.file.Path;
 
 public interface ReportStorageService {
 
-    Path createStagingFile(
-            TenantId tenantId,
-            ReportExecution execution);
+        Path createStagingFile(
+                        TenantId tenantId,
+                        ReportExecution execution);
 
-    ReportExecution storeGeneratedFile(
-            TenantId tenantId,
-            ReportExecution execution,
-            RenderedReportFile renderedFile,
-            String fileName,
-            String mimeType);
+        ReportExecution storeGeneratedFile(
+                        TenantId tenantId,
+                        ReportExecution execution,
+                        RenderedReportFile renderedFile,
+                        String fileName,
+                        String mimeType);
 
-    byte[] loadFile(
-            TenantId tenantId,
-            ReportExecution execution);
+        byte[] loadFile(
+                        TenantId tenantId,
+                        ReportExecution execution);
 
-    boolean exists(
-            TenantId tenantId,
-            ReportExecution execution);
+        boolean exists(
+                        TenantId tenantId,
+                        ReportExecution execution);
 
-    void deleteFile(
-            TenantId tenantId,
-            ReportExecution execution);
+        void deleteFile(
+                        TenantId tenantId,
+                        ReportExecution execution);
 
-    void cleanupStagingFile(
-            TenantId tenantId,
-            Path stagingFile);
+        void cleanupStagingFile(
+                        TenantId tenantId,
+                        Path stagingFile);
 }

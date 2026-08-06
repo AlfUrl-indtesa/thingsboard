@@ -5,6 +5,7 @@
  */
 package org.thingsboard.server.service.report;
 
+import org.springframework.core.io.Resource;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.report.ReportExecution;
 
@@ -23,7 +24,11 @@ public interface ReportStorageService {
                         String fileName,
                         String mimeType);
 
-        byte[] loadFile(
+        /**
+         * Returns a filesystem-backed resource without loading the
+         * complete PDF into the JVM heap.
+         */
+        Resource loadFile(
                         TenantId tenantId,
                         ReportExecution execution);
 

@@ -13,6 +13,9 @@ import org.thingsboard.server.common.data.report.ReportErrorCode;
 import org.thingsboard.server.common.data.report.ReportExecution;
 import org.thingsboard.server.common.data.report.ReportStorageType;
 
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -162,7 +165,7 @@ public class DefaultReportStorageService
         }
 
         @Override
-        public byte[] loadFile(
+        public Resource loadFile(
                         TenantId tenantId,
                         ReportExecution execution) {
 
@@ -170,30 +173,29 @@ public class DefaultReportStorageService
                                 tenantId,
                                 execution);
 
-                try {
-                        Path filePath = resolveStoredFilePath(
-                                        tenantId,
-                                        execution);
+                Path filePath = resolveStoredFilePath(
+                                tenantId,
+                                execution);
 
-                        if (!Files.exists(filePath)
-                                        || !Files.isRegularFile(
-                                                        filePath,
-                                                        LinkOption.NOFOLLOW_LINKS)) {
-                                throw new ReportServiceException(
-                                                ReportErrorCode.FILE_NOT_FOUND,
-                                                "Stored report file not found: "
-                                                                + execution.getFilePath());
-                        }
-
-                        return Files.readAllBytes(
-                                        filePath);
-
-                } catch (IOException e) {
+                if (!Files.exists(filePath)
+                                || !Files.isRegularFile(
+                                                filePath,
+                                                LinkOption.NOFOLLOW_LINKS)) {
                         throw new ReportServiceException(
                                         ReportErrorCode.FILE_NOT_FOUND,
-                                        "Failed to read stored report file",
-                                        e);
+                                        "Stored report file not found: "
+                                                        + execution.getFilePath());
                 }
+
+                if (!Files.isReadable(filePath)) {
+                        throw new ReportServiceException(
+                                        ReportErrorCode.FILE_NOT_FOUND,
+                                        "Stored report file is not readable: "
+                                                        + execution.getFilePath());
+                }
+
+                return new FileSystemResource(
+                                filePath);
         }
 
         @Override

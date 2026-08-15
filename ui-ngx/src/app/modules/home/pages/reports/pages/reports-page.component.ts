@@ -1,6 +1,7 @@
-﻿import { Component, OnInit } from "@angular/core";
+﻿import { Component, OnDestroy, OnInit } from "@angular/core";
+import { Subscription, timer } from "rxjs";
+import { finalize, switchMap } from "rxjs/operators";
 import { MatDialog } from "@angular/material/dialog";
-import { finalize } from "rxjs/operators";
 import { ReportTemplate } from "../models/report.models";
 import { ReportService } from "../services/report.service";
 import { ReportTemplateDialogComponent } from "../components/report-template-dialog.component";
@@ -12,7 +13,7 @@ import { GenerateReportDialogComponent } from "../components/generate-report-dia
   templateUrl: "./reports-page.component.html",
   styleUrls: ["./reports-page.component.scss"],
 })
-export class ReportsPageComponent implements OnInit {
+export class ReportsPageComponent implements OnInit, OnDestroy {
   displayedColumns = ["name", "type", "status", "actions"];
   executionDisplayedColumns = ["status", "fileName", "createdTime", "actions"];
   failedExecutionDisplayedColumns = [
@@ -29,6 +30,10 @@ export class ReportsPageComponent implements OnInit {
   loading = false;
   loadingExecutions = false;
 
+  private executionPollingSubscription?: Subscription;
+
+  private readonly executionPollingIntervalMs = 2000;
+
   constructor(
     private reportService: ReportService,
     private dialog: MatDialog,
@@ -36,6 +41,10 @@ export class ReportsPageComponent implements OnInit {
 
   ngOnInit(): void {
     this.refresh();
+  }
+
+  ngOnDestroy(): void {
+    this.stopExecutionPolling();
   }
 
   refresh(): void {
@@ -53,14 +62,90 @@ export class ReportsPageComponent implements OnInit {
       });
   }
 
-  loadExecutions(): void {
-    this.loadingExecutions = true;
+  loadExecutions(showLoading = true): void {
+    if (showLoading) {
+      this.loadingExecutions = true;
+    }
 
     this.reportService.getReportExecutions(0, 20)
-      .pipe(finalize(() => this.loadingExecutions = false))
-      .subscribe((pageData) => {
-        this.executions = pageData.data || pageData.content || [];
+      .pipe(
+        finalize(() => {
+          if (showLoading) {
+            this.loadingExecutions = false;
+          }
+        }),
+      )
+      .subscribe({
+        next: (pageData) => {
+          this.executions = pageData.data ||
+            pageData.content ||
+            [];
+
+          this.syncExecutionPolling();
+        },
+        error: () => {
+          this.stopExecutionPolling();
+        },
       });
+  }
+
+  private syncExecutionPolling(): void {
+    if (this.hasActiveExecutions()) {
+      this.startExecutionPolling();
+    } else {
+      this.stopExecutionPolling();
+    }
+  }
+
+  private startExecutionPolling(): void {
+    if (
+      this.executionPollingSubscription &&
+      !this.executionPollingSubscription.closed
+    ) {
+      return;
+    }
+
+    this.executionPollingSubscription = timer(
+      this.executionPollingIntervalMs,
+      this.executionPollingIntervalMs,
+    )
+      .pipe(
+        switchMap(() =>
+          this.reportService.getReportExecutions(
+            0,
+            20,
+          )
+        ),
+      )
+      .subscribe({
+        next: (pageData) => {
+          this.executions = pageData.data ||
+            pageData.content ||
+            [];
+
+          if (!this.hasActiveExecutions()) {
+            this.stopExecutionPolling();
+          }
+        },
+        error: () => {
+          this.stopExecutionPolling();
+        },
+      });
+  }
+
+  private stopExecutionPolling(): void {
+    if (this.executionPollingSubscription) {
+      this.executionPollingSubscription.unsubscribe();
+      this.executionPollingSubscription = undefined;
+    }
+  }
+
+  private hasActiveExecutions(): boolean {
+    return this.executions.some(
+      (execution) =>
+        execution?.status === "PENDING" ||
+        execution?.status === "RUNNING",
+    );
   }
 
   successfulExecutions(): any[] {

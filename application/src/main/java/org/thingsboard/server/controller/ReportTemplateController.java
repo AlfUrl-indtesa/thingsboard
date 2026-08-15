@@ -10,6 +10,7 @@ import org.thingsboard.server.common.data.report.GenerateReportResponse;
 import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.service.report.ReportExecutionService;
 import org.thingsboard.server.service.report.ReportTemplateService;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -17,6 +18,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyAuthority('TENANT_ADMIN', 'CUSTOMER_USER')")
 public class ReportTemplateController extends BaseController {
 
     private final ReportTemplateService reportTemplateService;

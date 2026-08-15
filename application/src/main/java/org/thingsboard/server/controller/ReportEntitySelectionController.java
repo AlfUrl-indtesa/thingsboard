@@ -16,12 +16,14 @@ import org.thingsboard.server.common.data.id.EntityIdFactory;
 import org.thingsboard.server.common.data.page.PageData;
 import org.thingsboard.server.common.data.report.ReportSelectableEntity;
 import org.thingsboard.server.service.report.ReportEntitySelectionService;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyAuthority('TENANT_ADMIN', 'CUSTOMER_USER')")
 public class ReportEntitySelectionController extends BaseController {
 
     private final ReportEntitySelectionService reportEntitySelectionService;
@@ -42,8 +44,7 @@ public class ReportEntitySelectionController extends BaseController {
                 targetCustomerId,
                 textSearch,
                 page,
-                pageSize
-        );
+                pageSize);
     }
 
     @GetMapping("/api/reports/selectable-entity-keys")
@@ -53,7 +54,6 @@ public class ReportEntitySelectionController extends BaseController {
 
         return reportEntitySelectionService.findSelectableEntityKeys(
                 getCurrentUser(),
-                EntityIdFactory.getByTypeAndUuid(entityType, entityId)
-        );
+                EntityIdFactory.getByTypeAndUuid(entityType, entityId));
     }
 }

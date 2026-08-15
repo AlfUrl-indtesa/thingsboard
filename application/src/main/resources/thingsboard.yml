@@ -139,6 +139,32 @@ report:
     # Tamaño máximo permitido para el PDF recibido.
     max-pdf-size-mb: "${REPORT_RENDER_MAX_PDF_SIZE_MB:100}"
 
+  async:
+    # Generación de reportes fuera del hilo HTTP.
+    enabled: "${REPORT_ASYNC_ENABLED:true}"
+
+    # Debe mantenerse inicialmente alineado con los dos
+    # procesos del renderer Node.
+    core-pool-size: "${REPORT_ASYNC_CORE_POOL_SIZE:2}"
+    max-pool-size: "${REPORT_ASYNC_MAX_POOL_SIZE:2}"
+
+    # Cola local de ejecución. PostgreSQL conserva todos los
+    # trabajos como PENDING hasta que un worker los reclama.
+    queue-capacity: "${REPORT_ASYNC_QUEUE_CAPACITY:50}"
+    keep-alive-seconds: "${REPORT_ASYNC_KEEP_ALIVE_SECONDS:60}"
+
+    shutdown-await-termination-seconds: "${REPORT_ASYNC_SHUTDOWN_AWAIT_TERMINATION_SECONDS:30}"
+
+    # Recuperación automática después de reinicios.
+    recovery-enabled: "${REPORT_ASYNC_RECOVERY_ENABLED:true}"
+    recovery-initial-delay-ms: "${REPORT_ASYNC_RECOVERY_INITIAL_DELAY_MS:10000}"
+    recovery-interval-ms: "${REPORT_ASYNC_RECOVERY_INTERVAL_MS:5000}"
+    recovery-batch-size: "${REPORT_ASYNC_RECOVERY_BATCH_SIZE:100}"
+
+    # Debe ser mayor que los 3 intentos de render de hasta
+    # 420 segundos cada uno. Quince minutos sería insuficiente.
+    stale-running-timeout-minutes: "${REPORT_ASYNC_STALE_RUNNING_TIMEOUT_MINUTES:60}"
+
 # ZooKeeper connection parameters
 # Controls ZooKeeper-based service discovery and cluster coordination for microservice deployments.
 zk:

@@ -17,6 +17,9 @@ public class DefaultReportRequestBuilderService implements ReportRequestBuilderS
     @Override
     public JsonNode buildExecutionRequest(ReportTemplate reportTemplate, GenerateReportRequest request) {
         ObjectNode root = objectMapper.createObjectNode();
+        root.set(
+                "request",
+                objectMapper.valueToTree(request));
         root.put("templateId", reportTemplate.getId().toString());
         root.put("templateName", reportTemplate.getName());
         root.put("reportType", reportTemplate.getType().name());

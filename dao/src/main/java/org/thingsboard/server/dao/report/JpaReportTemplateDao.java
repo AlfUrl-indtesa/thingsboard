@@ -10,6 +10,7 @@ import org.thingsboard.server.dao.model.sql.ReportTemplateEntity;
 
 import java.util.Optional;
 import java.util.UUID;
+import org.thingsboard.server.common.data.id.CustomerId;
 
 @Component
 @RequiredArgsConstructor
@@ -34,6 +35,21 @@ public class JpaReportTemplateDao implements ReportTemplateDao {
     public Page<ReportTemplate> findByTenantId(TenantId tenantId, Pageable pageable) {
         return repository.findByTenantId(tenantId.getId(), pageable)
                 .map(ReportTemplateEntity::toData);
+    }
+
+    @Override
+    public Page<ReportTemplate> findByTenantIdAndCustomerId(
+            TenantId tenantId,
+            CustomerId customerId,
+            Pageable pageable) {
+
+        return repository
+                .findByTenantIdAndCustomerId(
+                        tenantId.getId(),
+                        customerId.getId(),
+                        pageable)
+                .map(
+                        ReportTemplateEntity::toData);
     }
 
     @Override

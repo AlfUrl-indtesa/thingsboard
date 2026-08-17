@@ -17,6 +17,7 @@ import org.thingsboard.server.common.data.report.ReportExecution;
 import org.thingsboard.server.common.data.report.ReportExecutionStatus;
 import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.dao.report.ReportExecutionDao;
+import org.thingsboard.server.common.data.id.CustomerId;
 
 import java.util.UUID;
 
@@ -140,6 +141,38 @@ public class DefaultReportExecutionService
                                 .findByTenantIdAndTemplateId(
                                                 tenantId,
                                                 templateId,
+                                                pageable);
+        }
+
+        @Override
+        public Page<ReportExecution> findByTenantIdAndCustomerIdAndRequestedBy(
+                        TenantId tenantId,
+                        CustomerId customerId,
+                        UUID requestedBy,
+                        Pageable pageable) {
+
+                return reportExecutionDao
+                                .findByTenantIdAndCustomerIdAndRequestedBy(
+                                                tenantId,
+                                                customerId,
+                                                requestedBy,
+                                                pageable);
+        }
+
+        @Override
+        public Page<ReportExecution> findByTenantIdAndTemplateIdAndCustomerIdAndRequestedBy(
+                        TenantId tenantId,
+                        UUID templateId,
+                        CustomerId customerId,
+                        UUID requestedBy,
+                        Pageable pageable) {
+
+                return reportExecutionDao
+                                .findByTenantIdAndTemplateIdAndCustomerIdAndRequestedBy(
+                                                tenantId,
+                                                templateId,
+                                                customerId,
+                                                requestedBy,
                                                 pageable);
         }
 

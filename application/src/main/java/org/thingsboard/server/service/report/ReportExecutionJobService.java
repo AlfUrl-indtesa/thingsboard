@@ -18,6 +18,7 @@ import org.thingsboard.server.common.data.report.ReportExecution;
 import org.thingsboard.server.common.data.report.ReportExecutionStatus;
 import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.dao.report.ReportExecutionDao;
+import java.util.Objects;
 
 import java.nio.file.Path;
 import java.util.UUID;
@@ -27,347 +28,298 @@ import java.util.UUID;
 @Slf4j
 public class ReportExecutionJobService {
 
-    private final ReportExecutionDao reportExecutionDao;
-    private final ReportTemplateService reportTemplateService;
-    private final ReportValidationService reportValidationService;
-    private final ReportPayloadBuilderService reportPayloadBuilderService;
-    private final ReportRenderService reportRenderService;
-    private final ReportStorageService reportStorageService;
-    private final ObjectMapper objectMapper;
+        private final ReportExecutionDao reportExecutionDao;
+        private final ReportTemplateService reportTemplateService;
+        private final ReportValidationService reportValidationService;
+        private final ReportPayloadBuilderService reportPayloadBuilderService;
+        private final ReportRenderService reportRenderService;
+        private final ReportStorageService reportStorageService;
+        private final ObjectMapper objectMapper;
 
-    public void process(
-            TenantId tenantId,
-            UUID executionId) {
+        public void process(
+                        TenantId tenantId,
+                        UUID executionId) {
 
-        long startedTime =
-                System.currentTimeMillis();
+                long startedTime = System.currentTimeMillis();
 
-        /*
-         * Atomic database claim. Only one worker or application
-         * node may change this job from PENDING to RUNNING.
-         */
-        boolean claimed =
-                reportExecutionDao.markRunningIfPending(
-                        tenantId,
-                        executionId,
-                        startedTime
-                );
-
-        if (!claimed) {
-            log.debug(
-                    "[report-job] executionId={} was not pending; skipping",
-                    executionId
-            );
-
-            return;
-        }
-
-        ReportExecution execution =
-                reportExecutionDao
-                        .findById(
+                /*
+                 * Atomic database claim. Only one worker or application
+                 * node may change this job from PENDING to RUNNING.
+                 */
+                boolean claimed = reportExecutionDao.markRunningIfPending(
                                 tenantId,
-                                executionId
-                        )
-                        .orElse(null);
+                                executionId,
+                                startedTime);
 
-        if (execution == null) {
-            log.warn(
-                    "[report-job] executionId={} disappeared after claim",
-                    executionId
-            );
+                if (!claimed) {
+                        log.debug(
+                                        "[report-job] executionId={} was not pending; skipping",
+                                        executionId);
 
-            return;
+                        return;
+                }
+
+                ReportExecution execution = reportExecutionDao
+                                .findById(
+                                                tenantId,
+                                                executionId)
+                                .orElse(null);
+
+                if (execution == null) {
+                        log.warn(
+                                        "[report-job] executionId={} disappeared after claim",
+                                        executionId);
+
+                        return;
+                }
+
+                Path stagingFile = null;
+
+                try {
+                        ReportTemplate template = reportTemplateService.findById(
+                                        tenantId,
+                                        execution
+                                                        .getTemplateId()
+                                                        .getId());
+
+                        if (!Objects.equals(
+                                        execution.getCustomerId(),
+                                        template.getCustomerId())) {
+                                throw new ReportServiceException(
+                                                ReportErrorCode.ACCESS_DENIED,
+                                                "Report template customer scope changed after the execution was requested");
+                        }
+
+                        reportValidationService
+                                        .validateTemplateForExecution(
+                                                        template);
+
+                        GenerateReportRequest request = restoreRequest(
+                                        execution);
+
+                        reportValidationService
+                                        .validateGenerateRequest(
+                                                        request);
+
+                        JsonNode payload = reportPayloadBuilderService
+                                        .buildPayload(
+                                                        template,
+                                                        request);
+
+                        execution.setPayloadSnapshot(
+                                        payload);
+
+                        execution = reportExecutionDao.save(
+                                        tenantId,
+                                        execution);
+
+                        stagingFile = reportStorageService
+                                        .createStagingFile(
+                                                        tenantId,
+                                                        execution);
+
+                        RenderedReportFile renderedFile = reportRenderService.renderPdf(
+                                        payload,
+                                        stagingFile);
+
+                        execution = reportStorageService
+                                        .storeGeneratedFile(
+                                                        tenantId,
+                                                        execution,
+                                                        renderedFile,
+                                                        buildOutputFileName(
+                                                                        template,
+                                                                        execution),
+                                                        "application/pdf");
+
+                        execution.setStatus(
+                                        ReportExecutionStatus.SUCCESS);
+
+                        execution.setFinishedTime(
+                                        System.currentTimeMillis());
+
+                        execution.setErrorCode(null);
+                        execution.setErrorMessage(null);
+
+                        reportExecutionDao.save(
+                                        tenantId,
+                                        execution);
+
+                        log.info(
+                                        "[report-job] executionId={} completed successfully in {} ms",
+                                        executionId,
+                                        System.currentTimeMillis()
+                                                        - startedTime);
+
+                } catch (ReportServiceException e) {
+                        markFailed(
+                                        tenantId,
+                                        execution,
+                                        e.getErrorCode(),
+                                        e.getMessage());
+
+                        log.warn(
+                                        "[report-job] executionId={} failed: {}",
+                                        executionId,
+                                        e.getMessage());
+
+                } catch (Exception e) {
+                        markFailed(
+                                        tenantId,
+                                        execution,
+                                        ReportErrorCode.UNKNOWN_ERROR,
+                                        e.getMessage() != null
+                                                        ? e.getMessage()
+                                                        : e.getClass().getSimpleName());
+
+                        log.error(
+                                        "[report-job] executionId={} failed unexpectedly",
+                                        executionId,
+                                        e);
+
+                } finally {
+                        reportStorageService.cleanupStagingFile(
+                                        tenantId,
+                                        stagingFile);
+                }
         }
 
-        Path stagingFile = null;
+        private GenerateReportRequest restoreRequest(
+                        ReportExecution execution)
+                        throws Exception {
 
-        try {
-            ReportTemplate template =
-                    reportTemplateService.findById(
-                            tenantId,
-                            execution
-                                    .getTemplateId()
-                                    .getId()
-                    );
+                JsonNode snapshot = execution.getExecutionRequest();
 
-            reportValidationService
-                    .validateTemplateForExecution(
-                            template
-                    );
+                if (snapshot == null
+                                || snapshot.isNull()) {
 
-            GenerateReportRequest request =
-                    restoreRequest(
-                            execution
-                    );
+                        throw new ReportServiceException(
+                                        ReportErrorCode.UNKNOWN_ERROR,
+                                        "Report execution request snapshot is missing");
+                }
 
-            reportValidationService
-                    .validateGenerateRequest(
-                            request
-                    );
+                JsonNode requestNode = snapshot.get("request");
 
-            JsonNode payload =
-                    reportPayloadBuilderService
-                            .buildPayload(
-                                    template,
-                                    request
-                            );
+                /*
+                 * Normal path for executions created after the async
+                 * implementation.
+                 */
+                if (requestNode != null
+                                && !requestNode.isNull()) {
 
-            execution.setPayloadSnapshot(
-                    payload
-            );
+                        return objectMapper.treeToValue(
+                                        requestNode,
+                                        GenerateReportRequest.class);
+                }
 
-            execution =
-                    reportExecutionDao.save(
-                            tenantId,
-                            execution
-                    );
+                /*
+                 * Compatibility path for older PENDING records.
+                 * Only fields belonging to GenerateReportRequest are copied.
+                 */
+                ObjectNode compatibleRequest = objectMapper.createObjectNode();
 
-            stagingFile =
-                    reportStorageService
-                            .createStagingFile(
-                                    tenantId,
-                                    execution
-                            );
+                copyIfPresent(
+                                snapshot,
+                                compatibleRequest,
+                                "startTs");
 
-            RenderedReportFile renderedFile =
-                    reportRenderService.renderPdf(
-                            payload,
-                            stagingFile
-                    );
+                copyIfPresent(
+                                snapshot,
+                                compatibleRequest,
+                                "endTs");
 
-            execution =
-                    reportStorageService
-                            .storeGeneratedFile(
-                                    tenantId,
-                                    execution,
-                                    renderedFile,
-                                    buildOutputFileName(
-                                            template,
-                                            execution
-                                    ),
-                                    "application/pdf"
-                            );
+                copyIfPresent(
+                                snapshot,
+                                compatibleRequest,
+                                "entityIds");
 
-            execution.setStatus(
-                    ReportExecutionStatus.SUCCESS
-            );
+                copyIfPresent(
+                                snapshot,
+                                compatibleRequest,
+                                "locale");
 
-            execution.setFinishedTime(
-                    System.currentTimeMillis()
-            );
+                copyIfPresent(
+                                snapshot,
+                                compatibleRequest,
+                                "timezone");
 
-            execution.setErrorCode(null);
-            execution.setErrorMessage(null);
-
-            reportExecutionDao.save(
-                    tenantId,
-                    execution
-            );
-
-            log.info(
-                    "[report-job] executionId={} completed successfully in {} ms",
-                    executionId,
-                    System.currentTimeMillis()
-                            - startedTime
-            );
-
-        } catch (ReportServiceException e) {
-            markFailed(
-                    tenantId,
-                    execution,
-                    e.getErrorCode(),
-                    e.getMessage()
-            );
-
-            log.warn(
-                    "[report-job] executionId={} failed: {}",
-                    executionId,
-                    e.getMessage()
-            );
-
-        } catch (Exception e) {
-            markFailed(
-                    tenantId,
-                    execution,
-                    ReportErrorCode.UNKNOWN_ERROR,
-                    e.getMessage() != null
-                            ? e.getMessage()
-                            : e.getClass().getSimpleName()
-            );
-
-            log.error(
-                    "[report-job] executionId={} failed unexpectedly",
-                    executionId,
-                    e
-            );
-
-        } finally {
-            reportStorageService.cleanupStagingFile(
-                    tenantId,
-                    stagingFile
-            );
-        }
-    }
-
-    private GenerateReportRequest restoreRequest(
-            ReportExecution execution)
-            throws Exception {
-
-        JsonNode snapshot =
-                execution.getExecutionRequest();
-
-        if (snapshot == null
-                || snapshot.isNull()) {
-
-            throw new ReportServiceException(
-                    ReportErrorCode.UNKNOWN_ERROR,
-                    "Report execution request snapshot is missing"
-            );
+                return objectMapper.treeToValue(
+                                compatibleRequest,
+                                GenerateReportRequest.class);
         }
 
-        JsonNode requestNode =
-                snapshot.get("request");
+        private void copyIfPresent(
+                        JsonNode source,
+                        ObjectNode target,
+                        String fieldName) {
 
-        /*
-         * Normal path for executions created after the async
-         * implementation.
-         */
-        if (requestNode != null
-                && !requestNode.isNull()) {
+                JsonNode value = source.get(fieldName);
 
-            return objectMapper.treeToValue(
-                    requestNode,
-                    GenerateReportRequest.class
-            );
+                if (value != null
+                                && !value.isNull()) {
+
+                        target.set(
+                                        fieldName,
+                                        value);
+                }
         }
 
-        /*
-         * Compatibility path for older PENDING records.
-         * Only fields belonging to GenerateReportRequest are copied.
-         */
-        ObjectNode compatibleRequest =
-                objectMapper.createObjectNode();
+        private void markFailed(
+                        TenantId tenantId,
+                        ReportExecution execution,
+                        ReportErrorCode errorCode,
+                        String errorMessage) {
 
-        copyIfPresent(
-                snapshot,
-                compatibleRequest,
-                "startTs"
-        );
+                try {
+                        execution.setStatus(
+                                        ReportExecutionStatus.FAILED);
 
-        copyIfPresent(
-                snapshot,
-                compatibleRequest,
-                "endTs"
-        );
+                        execution.setFinishedTime(
+                                        System.currentTimeMillis());
 
-        copyIfPresent(
-                snapshot,
-                compatibleRequest,
-                "entityIds"
-        );
+                        execution.setErrorCode(
+                                        errorCode);
 
-        copyIfPresent(
-                snapshot,
-                compatibleRequest,
-                "locale"
-        );
+                        execution.setErrorMessage(
+                                        errorMessage);
 
-        copyIfPresent(
-                snapshot,
-                compatibleRequest,
-                "timezone"
-        );
+                        reportExecutionDao.save(
+                                        tenantId,
+                                        execution);
 
-        return objectMapper.treeToValue(
-                compatibleRequest,
-                GenerateReportRequest.class
-        );
-    }
-
-    private void copyIfPresent(
-            JsonNode source,
-            ObjectNode target,
-            String fieldName) {
-
-        JsonNode value =
-                source.get(fieldName);
-
-        if (value != null
-                && !value.isNull()) {
-
-            target.set(
-                    fieldName,
-                    value
-            );
+                } catch (Exception persistenceError) {
+                        log.error(
+                                        "[report-job] unable to persist FAILED status for executionId={}",
+                                        execution.getId() != null
+                                                        ? execution.getId().getId()
+                                                        : null,
+                                        persistenceError);
+                }
         }
-    }
 
-    private void markFailed(
-            TenantId tenantId,
-            ReportExecution execution,
-            ReportErrorCode errorCode,
-            String errorMessage) {
+        private String buildOutputFileName(
+                        ReportTemplate template,
+                        ReportExecution execution) {
 
-        try {
-            execution.setStatus(
-                    ReportExecutionStatus.FAILED
-            );
+                String baseName = template.getName() != null
+                                && !template.getName().isBlank()
+                                                ? template.getName()
+                                                                .trim()
+                                                                .replaceAll(
+                                                                                "[^a-zA-Z0-9._-]",
+                                                                                "_")
+                                                : "report";
 
-            execution.setFinishedTime(
-                    System.currentTimeMillis()
-            );
+                String executionId = execution.getId() != null
+                                ? execution
+                                                .getId()
+                                                .toString()
+                                : String.valueOf(
+                                                System.currentTimeMillis());
 
-            execution.setErrorCode(
-                    errorCode
-            );
-
-            execution.setErrorMessage(
-                    errorMessage
-            );
-
-            reportExecutionDao.save(
-                    tenantId,
-                    execution
-            );
-
-        } catch (Exception persistenceError) {
-            log.error(
-                    "[report-job] unable to persist FAILED status for executionId={}",
-                    execution.getId() != null
-                            ? execution.getId().getId()
-                            : null,
-                    persistenceError
-            );
+                return baseName
+                                + "_"
+                                + executionId
+                                + ".pdf";
         }
-    }
-
-    private String buildOutputFileName(
-            ReportTemplate template,
-            ReportExecution execution) {
-
-        String baseName =
-                template.getName() != null
-                        && !template.getName().isBlank()
-                        ? template.getName()
-                        .trim()
-                        .replaceAll(
-                                "[^a-zA-Z0-9._-]",
-                                "_"
-                        )
-                        : "report";
-
-        String executionId =
-                execution.getId() != null
-                        ? execution
-                        .getId()
-                        .toString()
-                        : String.valueOf(
-                                System.currentTimeMillis()
-                        );
-
-        return baseName
-                + "_"
-                + executionId
-                + ".pdf";
-    }
 }

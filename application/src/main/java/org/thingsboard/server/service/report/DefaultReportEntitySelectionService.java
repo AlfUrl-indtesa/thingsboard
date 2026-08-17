@@ -23,6 +23,11 @@ import org.thingsboard.server.dao.timeseries.TimeseriesService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.security.model.SecurityUser;
 
+import org.springframework.security.access.AccessDeniedException;
+import org.thingsboard.server.common.data.id.AssetId;
+import org.thingsboard.server.common.data.id.DeviceId;
+import org.thingsboard.server.common.data.security.Authority;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -126,6 +131,9 @@ public class DefaultReportEntitySelectionService implements ReportEntitySelectio
         if (entityId == null) {
             return Collections.emptyList();
         }
+        validateEntityAccess(
+                user,
+                entityId);
 
         try {
             return timeseriesService.findAllLatest(user.getTenantId(), entityId).get().stream()
@@ -136,5 +144,82 @@ public class DefaultReportEntitySelectionService implements ReportEntitySelectio
         } catch (Exception e) {
             throw new RuntimeException("Failed to load selectable telemetry keys for entity: " + entityId, e);
         }
+    }
+
+    private void validateEntityAccess(
+            SecurityUser user,
+            EntityId entityId) {
+
+        if (user == null
+                || entityId == null) {
+            throw new AccessDeniedException(
+                    "Report entity access denied.");
+        }
+
+        TenantId tenantId = user.getTenantId();
+
+        switch (entityId.getEntityType()) {
+
+            case DEVICE:
+                Device device = deviceService.findDeviceById(
+                        tenantId,
+                        new DeviceId(
+                                entityId.getId()));
+
+                validateCustomerOwnership(
+                        user,
+                        device != null
+                                ? device.getCustomerId()
+                                : null,
+                        device != null);
+
+                return;
+
+            case ASSET:
+                Asset asset = assetService.findAssetById(
+                        tenantId,
+                        new AssetId(
+                                entityId.getId()));
+
+                validateCustomerOwnership(
+                        user,
+                        asset != null
+                                ? asset.getCustomerId()
+                                : null,
+                        asset != null);
+
+                return;
+
+            default:
+                throw new AccessDeniedException(
+                        "Entity type is not allowed for reports.");
+        }
+    }
+
+    private void validateCustomerOwnership(
+            SecurityUser user,
+            CustomerId entityCustomerId,
+            boolean entityExists) {
+
+        if (!entityExists) {
+            throw new AccessDeniedException(
+                    "Report entity access denied.");
+        }
+
+        if (Authority.TENANT_ADMIN.equals(
+                user.getAuthority())) {
+            return;
+        }
+
+        if (Authority.CUSTOMER_USER.equals(
+                user.getAuthority())
+                && user.getCustomerId() != null
+                && user.getCustomerId().equals(
+                        entityCustomerId)) {
+            return;
+        }
+
+        throw new AccessDeniedException(
+                "Report entity access denied.");
     }
 }

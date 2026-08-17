@@ -11,6 +11,7 @@ import org.thingsboard.server.common.data.report.ReportTemplateStatus;
 import org.thingsboard.server.dao.report.ReportTemplateDao;
 
 import java.util.UUID;
+import org.thingsboard.server.common.data.id.CustomerId;
 
 @Service
 @RequiredArgsConstructor
@@ -50,8 +51,7 @@ public class DefaultReportTemplateService implements ReportTemplateService {
         return reportTemplateDao.findById(tenantId, templateId)
                 .orElseThrow(() -> new ReportServiceException(
                         ReportErrorCode.TEMPLATE_NOT_FOUND,
-                        "Report template not found: " + templateId
-                ));
+                        "Report template not found: " + templateId));
     }
 
     @Override
@@ -60,13 +60,25 @@ public class DefaultReportTemplateService implements ReportTemplateService {
     }
 
     @Override
+    public Page<ReportTemplate> findByTenantIdAndCustomerId(
+            TenantId tenantId,
+            CustomerId customerId,
+            Pageable pageable) {
+
+        return reportTemplateDao
+                .findByTenantIdAndCustomerId(
+                        tenantId,
+                        customerId,
+                        pageable);
+    }
+
+    @Override
     public void delete(TenantId tenantId, UUID templateId) {
         ReportTemplate existing = findById(tenantId, templateId);
         if (Boolean.TRUE.equals(existing.getSystem())) {
             throw new ReportServiceException(
                     ReportErrorCode.ACCESS_DENIED,
-                    "System report templates cannot be deleted"
-            );
+                    "System report templates cannot be deleted");
         }
         reportTemplateDao.removeById(tenantId, templateId);
     }

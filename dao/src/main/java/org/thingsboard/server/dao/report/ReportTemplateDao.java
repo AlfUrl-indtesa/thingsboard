@@ -7,6 +7,7 @@ import org.thingsboard.server.common.data.report.ReportTemplate;
 
 import java.util.Optional;
 import java.util.UUID;
+import org.thingsboard.server.common.data.id.CustomerId;
 
 public interface ReportTemplateDao {
 
@@ -15,6 +16,11 @@ public interface ReportTemplateDao {
     Optional<ReportTemplate> findById(TenantId tenantId, UUID id);
 
     Page<ReportTemplate> findByTenantId(TenantId tenantId, Pageable pageable);
+
+    Page<ReportTemplate> findByTenantIdAndCustomerId(
+            TenantId tenantId,
+            CustomerId customerId,
+            Pageable pageable);
 
     void removeById(TenantId tenantId, UUID id);
 }

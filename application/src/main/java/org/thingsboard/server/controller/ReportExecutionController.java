@@ -14,18 +14,14 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.report.ReportExecution;
+import org.thingsboard.server.service.report.ReportAccessService;
 import org.thingsboard.server.service.report.ReportExecutionService;
 import org.thingsboard.server.service.report.ReportStorageService;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.thingsboard.server.service.security.model.SecurityUser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -42,6 +38,8 @@ public class ReportExecutionController
 
         private final ReportStorageService reportStorageService;
 
+        private final ReportAccessService reportAccessService;
+
         @GetMapping("/report-executions/{executionId}")
         @ResponseBody
         public ReportExecution getReportExecutionById(
@@ -52,14 +50,19 @@ public class ReportExecutionController
                                 "executionId",
                                 strExecutionId);
 
-                TenantId tenantId = getTenantId();
+                SecurityUser user = getCurrentUser();
 
-                UUID executionId = UUID.fromString(
-                                strExecutionId);
+                ReportExecution execution = reportExecutionService.findById(
+                                getTenantId(),
+                                UUID.fromString(
+                                                strExecutionId));
 
-                return reportExecutionService.findById(
-                                tenantId,
-                                executionId);
+                reportAccessService.checkExecutionRead(
+                                user,
+                                execution);
+
+                return sanitizeExecution(
+                                execution);
         }
 
         @GetMapping("/report-executions")
@@ -70,13 +73,35 @@ public class ReportExecutionController
                         @RequestParam(defaultValue = "10") int pageSize)
                         throws Exception {
 
+                SecurityUser user = getCurrentUser();
+
                 TenantId tenantId = getTenantId();
 
-                return reportExecutionService.findByTenantId(
-                                tenantId,
-                                PageRequest.of(
-                                                page,
-                                                pageSize));
+                PageRequest pageable = PageRequest.of(
+                                page,
+                                pageSize);
+
+                Page<ReportExecution> executions;
+
+                if (reportAccessService
+                                .isTenantAdmin(user)) {
+
+                        executions = reportExecutionService
+                                        .findByTenantId(
+                                                        tenantId,
+                                                        pageable);
+
+                } else {
+                        executions = reportExecutionService
+                                        .findByTenantIdAndCustomerIdAndRequestedBy(
+                                                        tenantId,
+                                                        user.getCustomerId(),
+                                                        user.getId().getId(),
+                                                        pageable);
+                }
+
+                return executions.map(
+                                this::sanitizeExecution);
         }
 
         @GetMapping("/report-executions/template/{templateId}")
@@ -94,18 +119,40 @@ public class ReportExecutionController
                                 "templateId",
                                 strTemplateId);
 
+                SecurityUser user = getCurrentUser();
+
                 TenantId tenantId = getTenantId();
 
                 UUID templateId = UUID.fromString(
                                 strTemplateId);
 
-                return reportExecutionService
-                                .findByTenantIdAndTemplateId(
-                                                tenantId,
-                                                templateId,
-                                                PageRequest.of(
-                                                                page,
-                                                                pageSize));
+                PageRequest pageable = PageRequest.of(
+                                page,
+                                pageSize);
+
+                Page<ReportExecution> executions;
+
+                if (reportAccessService
+                                .isTenantAdmin(user)) {
+
+                        executions = reportExecutionService
+                                        .findByTenantIdAndTemplateId(
+                                                        tenantId,
+                                                        templateId,
+                                                        pageable);
+
+                } else {
+                        executions = reportExecutionService
+                                        .findByTenantIdAndTemplateIdAndCustomerIdAndRequestedBy(
+                                                        tenantId,
+                                                        templateId,
+                                                        user.getCustomerId(),
+                                                        user.getId().getId(),
+                                                        pageable);
+                }
+
+                return executions.map(
+                                this::sanitizeExecution);
         }
 
         @DeleteMapping("/report-executions/{executionId}")
@@ -121,6 +168,14 @@ public class ReportExecutionController
 
                 UUID executionId = UUID.fromString(
                                 strExecutionId);
+
+                ReportExecution execution = reportExecutionService.findById(
+                                tenantId,
+                                executionId);
+
+                reportAccessService.checkExecutionDelete(
+                                getCurrentUser(),
+                                execution);
 
                 reportExecutionService.delete(
                                 tenantId,
@@ -146,12 +201,21 @@ public class ReportExecutionController
                                 tenantId,
                                 executionId);
 
+                /*
+                 * Authorization MUST occur before obtaining the
+                 * filesystem resource.
+                 */
+                reportAccessService.checkExecutionRead(
+                                getCurrentUser(),
+                                execution);
+
                 Resource resource = reportStorageService.loadFile(
                                 tenantId,
                                 execution);
 
                 String fileName = execution.getFileName() != null
-                                && !execution.getFileName()
+                                && !execution
+                                                .getFileName()
                                                 .isBlank()
                                                                 ? execution.getFileName()
                                                                 : "report.pdf";
@@ -194,6 +258,21 @@ public class ReportExecutionController
                                 .ok()
                                 .headers(headers)
                                 .body(resource);
+        }
+
+        private ReportExecution sanitizeExecution(
+                        ReportExecution execution) {
+
+                /*
+                 * These properties are internal implementation
+                 * details and must not be exposed through the API.
+                 */
+                execution.setFilePath(null);
+                execution.setExternalFileId(null);
+                execution.setChecksum(null);
+                execution.setPayloadSnapshot(null);
+
+                return execution;
         }
 
         private MediaType resolveMediaType(

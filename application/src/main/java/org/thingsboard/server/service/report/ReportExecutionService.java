@@ -7,6 +7,7 @@ import org.thingsboard.server.common.data.report.GenerateReportRequest;
 import org.thingsboard.server.common.data.report.ReportExecution;
 
 import java.util.UUID;
+import org.thingsboard.server.common.data.id.CustomerId;
 
 public interface ReportExecutionService {
 
@@ -17,6 +18,19 @@ public interface ReportExecutionService {
     Page<ReportExecution> findByTenantId(TenantId tenantId, Pageable pageable);
 
     Page<ReportExecution> findByTenantIdAndTemplateId(TenantId tenantId, UUID templateId, Pageable pageable);
+
+    Page<ReportExecution> findByTenantIdAndCustomerIdAndRequestedBy(
+            TenantId tenantId,
+            CustomerId customerId,
+            UUID requestedBy,
+            Pageable pageable);
+
+    Page<ReportExecution> findByTenantIdAndTemplateIdAndCustomerIdAndRequestedBy(
+            TenantId tenantId,
+            UUID templateId,
+            CustomerId customerId,
+            UUID requestedBy,
+            Pageable pageable);
 
     void delete(TenantId tenantId, UUID executionId);
 }

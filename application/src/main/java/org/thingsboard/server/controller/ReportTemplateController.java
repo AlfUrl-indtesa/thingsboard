@@ -16,9 +16,11 @@ import org.thingsboard.server.common.data.report.GenerateReportRequest;
 import org.thingsboard.server.common.data.report.GenerateReportResponse;
 import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.service.report.ReportAccessService;
+import org.thingsboard.server.service.report.ReportEntitySecurityService;
 import org.thingsboard.server.service.report.ReportExecutionService;
 import org.thingsboard.server.service.report.ReportTemplateService;
 import org.thingsboard.server.service.security.model.SecurityUser;
+import org.thingsboard.server.service.report.ReportEntitySecurityService;
 
 import java.util.UUID;
 
@@ -35,6 +37,8 @@ public class ReportTemplateController
 
     private final ReportAccessService reportAccessService;
 
+    private final ReportEntitySecurityService reportEntitySecurityService;
+
     @PostMapping("/report-templates")
     @ResponseBody
     @PreAuthorize("hasAuthority('TENANT_ADMIN')")
@@ -47,6 +51,11 @@ public class ReportTemplateController
         UUID userId = getCurrentUser()
                 .getId()
                 .getId();
+
+        reportEntitySecurityService
+                .validateTemplateDefinition(
+                        tenantId,
+                        reportTemplate);
 
         return reportTemplateService.save(
                 tenantId,
@@ -159,6 +168,12 @@ public class ReportTemplateController
         reportAccessService.checkTemplateRead(
                 user,
                 template);
+
+        reportEntitySecurityService
+                .validateUserGenerationAccess(
+                        user,
+                        template,
+                        request);
 
         var execution = reportExecutionService.generate(
                 tenantId,

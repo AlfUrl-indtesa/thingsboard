@@ -21,9 +21,15 @@ public class DefaultReportEntityResolverService implements ReportEntityResolverS
 
     private final DeviceService deviceService;
     private final AssetService assetService;
+    private final ReportEntitySecurityService reportEntitySecurityService;
 
     @Override
     public List<ReportTargetEntity> resolveEntities(ReportTemplate template, GenerateReportRequest request) {
+        reportEntitySecurityService
+                .validateExecutionScope(
+                        template,
+                        request);
+
         List<ReportTargetEntity> result = new ArrayList<>();
 
         List<EntityId> sourceEntityIds = request.getEntityIds();
@@ -52,39 +58,85 @@ public class DefaultReportEntityResolverService implements ReportEntityResolverS
                 "Report scope type is not yet supported: " + template.getScopeType());
     }
 
-    private ReportTargetEntity resolveTargetEntity(TenantId tenantId, EntityId entityId) {
-        ReportTargetEntity target = new ReportTargetEntity();
-        target.setEntityId(entityId.getId());
-        target.setEntityType(entityId.getEntityType().name());
+    private ReportTargetEntity resolveTargetEntity(
+            TenantId tenantId,
+            EntityId entityId) {
 
-        String name = null;
-        String label = null;
+        if (tenantId == null
+                || entityId == null
+                || entityId.getId() == null
+                || entityId.getEntityType() == null) {
 
-        if (tenantId != null) {
-            switch (entityId.getEntityType()) {
-                case DEVICE:
-                    Device device = deviceService.findDeviceById(tenantId, new DeviceId(entityId.getId()));
-                    if (device != null) {
-                        name = device.getName();
-                        label = device.getLabel();
-                    }
-                    break;
-
-                case ASSET:
-                    Asset asset = assetService.findAssetById(tenantId, new AssetId(entityId.getId()));
-                    if (asset != null) {
-                        name = asset.getName();
-                        label = asset.getLabel();
-                    }
-                    break;
-
-                default:
-                    break;
-            }
+            throw new ReportServiceException(
+                    ReportErrorCode.INVALID_ENTITY_SCOPE,
+                    "Invalid report entity reference");
         }
 
-        target.setName(notBlank(name) ? name : entityId.getId().toString());
-        target.setLabel(notBlank(label) ? label : target.getEntityType());
+        ReportTargetEntity target = new ReportTargetEntity();
+
+        target.setEntityId(
+                entityId.getId());
+
+        target.setEntityType(
+                entityId.getEntityType().name());
+
+        String name;
+        String label;
+
+        switch (entityId.getEntityType()) {
+
+            case DEVICE:
+                Device device = deviceService.findDeviceById(
+                        tenantId,
+                        new DeviceId(
+                                entityId.getId()));
+
+                if (device == null) {
+                    throw new ReportServiceException(
+                            ReportErrorCode.INVALID_ENTITY_SCOPE,
+                            "Report device was not found");
+                }
+
+                name = device.getName();
+
+                label = device.getLabel();
+
+                break;
+
+            case ASSET:
+                Asset asset = assetService.findAssetById(
+                        tenantId,
+                        new AssetId(
+                                entityId.getId()));
+
+                if (asset == null) {
+                    throw new ReportServiceException(
+                            ReportErrorCode.INVALID_ENTITY_SCOPE,
+                            "Report asset was not found");
+                }
+
+                name = asset.getName();
+
+                label = asset.getLabel();
+
+                break;
+
+            default:
+                throw new ReportServiceException(
+                        ReportErrorCode.INVALID_ENTITY_SCOPE,
+                        "Unsupported report entity type: "
+                                + entityId.getEntityType());
+        }
+
+        target.setName(
+                notBlank(name)
+                        ? name
+                        : entityId.getId().toString());
+
+        target.setLabel(
+                notBlank(label)
+                        ? label
+                        : target.getEntityType());
 
         return target;
     }

@@ -1,0 +1,23 @@
+[Unit]
+Description=Eficentra Report Render Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/eficentra-report-render
+ExecStart=/usr/bin/node /opt/eficentra-report-render/src/server.js
+Restart=always
+RestartSec=5
+User=thingsboard
+
+Environment=PORT=3000
+Environment=RENDER_WORKERS=2
+Environment=RENDER_CONCURRENCY=1
+Environment=RENDER_MAX_QUEUE=20
+Environment=RENDER_QUEUE_TIMEOUT_MS=300000
+Environment=RENDER_MAX_PAYLOAD_MB=50
+
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

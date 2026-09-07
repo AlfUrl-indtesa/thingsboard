@@ -27,6 +27,8 @@ import org.thingsboard.server.common.data.report.ReportTemplate;
 import org.thingsboard.server.common.data.report.ReportTemplateStatus;
 import org.thingsboard.server.common.data.report.ReportTimeRangeConfig;
 
+import java.util.Objects;
+
 @Service
 public class DefaultReportValidationService implements ReportValidationService {
 
@@ -123,16 +125,50 @@ public class DefaultReportValidationService implements ReportValidationService {
             case FIXED_ENTITIES:
                 validateFixedEntities(entityFilter);
                 break;
+
             case CUSTOMER_ENTITIES:
                 if (entityFilter.getCustomerId() == null) {
                     throw new ReportServiceException(
                             ReportErrorCode.INVALID_ENTITY_SCOPE,
                             "Customer entity scope requires a customerId");
                 }
+
+                if (reportTemplate.getCustomerId() != null
+                        && !Objects.equals(
+                                reportTemplate.getCustomerId(),
+                                entityFilter.getCustomerId())) {
+                    throw new ReportServiceException(
+                            ReportErrorCode.INVALID_ENTITY_SCOPE,
+                            "Template and entity filter customer scopes must match");
+                }
                 break;
+
             case TENANT_ENTITIES:
-            case CURRENT_CUSTOMER_ENTITIES:
+                if (reportTemplate.getCustomerId() != null
+                        || entityFilter.getCustomerId() != null) {
+                    throw new ReportServiceException(
+                            ReportErrorCode.INVALID_ENTITY_SCOPE,
+                            "Tenant entity scope cannot be restricted to a customer");
+                }
                 break;
+
+            case CURRENT_CUSTOMER_ENTITIES:
+                if (reportTemplate.getCustomerId() == null) {
+                    throw new ReportServiceException(
+                            ReportErrorCode.INVALID_ENTITY_SCOPE,
+                            "Current customer scope requires a template customerId");
+                }
+
+                if (entityFilter.getCustomerId() != null
+                        && !Objects.equals(
+                                reportTemplate.getCustomerId(),
+                                entityFilter.getCustomerId())) {
+                    throw new ReportServiceException(
+                            ReportErrorCode.INVALID_ENTITY_SCOPE,
+                            "Template and entity filter customer scopes must match");
+                }
+                break;
+
             default:
                 throw new ReportServiceException(
                         ReportErrorCode.INVALID_ENTITY_SCOPE,

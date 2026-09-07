@@ -178,6 +178,59 @@ class DefaultReportValidationServiceTest {
                 exception.getErrorCode());
     }
 
+    @Test
+    void currentCustomerScopeRequiresPersistedCustomer() {
+        ReportTemplate template =
+                validTemplate(
+                        ReportScopeType.CURRENT_CUSTOMER_ENTITIES);
+
+        template.setCustomerId(null);
+
+        ReportServiceException exception = assertThrows(
+                ReportServiceException.class,
+                () -> service.validateTemplateForSave(template));
+
+        assertEquals(
+                ReportErrorCode.INVALID_ENTITY_SCOPE,
+                exception.getErrorCode());
+    }
+
+    @Test
+    void tenantScopeRejectsCustomerRestriction() {
+        ReportTemplate template =
+                validTemplate(
+                        ReportScopeType.TENANT_ENTITIES);
+
+        template.setCustomerId(
+                new CustomerId(UUID.randomUUID()));
+
+        ReportServiceException exception = assertThrows(
+                ReportServiceException.class,
+                () -> service.validateTemplateForSave(template));
+
+        assertEquals(
+                ReportErrorCode.INVALID_ENTITY_SCOPE,
+                exception.getErrorCode());
+    }
+
+    @Test
+    void customerScopeRejectsMismatchedTemplateCustomer() {
+        ReportTemplate template =
+                validTemplate(
+                        ReportScopeType.CUSTOMER_ENTITIES);
+
+        template.setCustomerId(
+                new CustomerId(UUID.randomUUID()));
+
+        ReportServiceException exception = assertThrows(
+                ReportServiceException.class,
+                () -> service.validateTemplateForSave(template));
+
+        assertEquals(
+                ReportErrorCode.INVALID_ENTITY_SCOPE,
+                exception.getErrorCode());
+    }
+
     private ReportTemplate validTemplate(ReportScopeType scopeType) {
         ReportEntityFilter entityFilter = new ReportEntityFilter();
         entityFilter.setScopeType(scopeType);
@@ -206,6 +259,12 @@ class DefaultReportValidationServiceTest {
         template.setScopeType(scopeType);
         template.setEntityFilter(entityFilter);
         template.setSections(List.of(section));
+
+        if (scopeType
+                == ReportScopeType.CURRENT_CUSTOMER_ENTITIES) {
+            template.setCustomerId(
+                    new CustomerId(UUID.randomUUID()));
+        }
 
         return template;
     }

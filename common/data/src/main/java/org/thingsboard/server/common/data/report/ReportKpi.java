@@ -44,7 +44,7 @@ public class ReportKpi {
      * Operación utilizada para calcular el KPI.
      * Ejemplo: AVG, MIN, MAX, SUM.
      */
-    private ReportAggregationType aggregation;
+    private ReportKpiAggregationType aggregation;
 
     private Double value;
 
